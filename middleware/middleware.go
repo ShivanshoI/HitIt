@@ -1,10 +1,14 @@
 package middleware
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 	"time"
+
+	"pog/internal"
 )
 
 // ── types ───────────────────────────────────────────────────────────
@@ -18,6 +22,34 @@ type statusWriter struct {
 func (w *statusWriter) WriteHeader(code int) {
 	w.code = code
 	w.ResponseWriter.WriteHeader(code)
+}
+
+// Auth verifies the JWT token in the Authorization header.
+func Auth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			internal.ErrorResponse(w, internal.NewUnauthorized("Authorization header is missing"))
+			return
+		}
+
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			internal.ErrorResponse(w, internal.NewUnauthorized("Invalid Authorization header format"))
+			return
+		}
+
+		tokenString := parts[1]
+		userID, err := internal.ValidateToken(tokenString)
+		if err != nil {
+			internal.ErrorResponse(w, internal.NewUnauthorized("Invalid or expired token"))
+			return
+		}
+
+		// Add userID to the request context
+		ctx := context.WithValue(r.Context(), internal.UserIDKey, userID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 // ── middleware functions ────────────────────────────────────────────

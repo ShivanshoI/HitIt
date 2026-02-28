@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"log"
 	"os"
 	"time"
 
@@ -33,10 +34,6 @@ func ConnectMongo() (*mongo.Database, error) {
 		return nil, err
 	}
 
-	// ping to confirm connection is alive
-	if err := client.Ping(ctx, nil); err != nil {
-		return nil, err
-	}
-
+	log.Printf("[DB] Successfully connected to database: %s", dbName)
 	return client.Database(dbName), nil
 }

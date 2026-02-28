@@ -111,38 +111,52 @@ func (s *RequestService) Create(ctx context.Context, payload *CreateRequestDTO, 
 	}, nil
 }
 
-func (s *RequestService) ListByCollection(ctx context.Context, collectionID string) ([]RequestResponse, error) {
-	requestsList, err := s.repo.ListByCollectionID(ctx, collectionID)
+func (s *RequestService) ListByCollection(ctx context.Context, collectionID string) ([]RequestSummaryResponse, error) {
+	requestsList, err := s.repo.ListSummariesByCollectionID(ctx, collectionID)
 	if err != nil {
 		return nil, internal.NewInternalError("Failed to list requests")
 	}
 
-	responses := make([]RequestResponse, 0)
+	responses := make([]RequestSummaryResponse, 0, len(requestsList))
 	for _, req := range requestsList {
-		hList := make([]KeyValuePair, len(req.Headers))
-		for i, h := range req.Headers {
-			hList[i] = KeyValuePair{Key: h.Key, Value: h.Value}
-		}
-
-		pList := make([]KeyValuePair, len(req.Params))
-		for i, p := range req.Params {
-			pList[i] = KeyValuePair{Key: p.Key, Value: p.Value}
-		}
-
-		responses = append(responses, RequestResponse{
+		responses = append(responses, RequestSummaryResponse{
 			ID:           req.ID.Hex(),
 			CollectionID: req.CollectionID.Hex(),
 			Name:         req.Name,
 			Method:       req.Method,
-			URL:          req.URL,
-			Headers:      hList,
-			Params:       pList,
-			Body:         req.Body,
-			Auth:         req.Auth,
-			CreatedAt:    req.CreatedAt.Format(time.RFC3339),
-			UpdatedAt:    req.UpdatedAt.Format(time.RFC3339),
 		})
 	}
 
 	return responses, nil
+}
+
+func (s *RequestService) GetByID(ctx context.Context, requestID string) (*RequestResponse, error) {
+	req, err := s.repo.GetByID(ctx, requestID)
+	if err != nil {
+		return nil, internal.NewNotFound("Request not found")
+	}
+
+	respHeaders := make([]KeyValuePair, len(req.Headers))
+	for i, h := range req.Headers {
+		respHeaders[i] = KeyValuePair{Key: h.Key, Value: h.Value}
+	}
+
+	respParams := make([]KeyValuePair, len(req.Params))
+	for i, p := range req.Params {
+		respParams[i] = KeyValuePair{Key: p.Key, Value: p.Value}
+	}
+
+	return &RequestResponse{
+		ID:           req.ID.Hex(),
+		CollectionID: req.CollectionID.Hex(),
+		Name:         req.Name,
+		Method:       req.Method,
+		URL:          req.URL,
+		Headers:      respHeaders,
+		Params:       respParams,
+		Body:         req.Body,
+		Auth:         req.Auth,
+		CreatedAt:    req.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:    req.UpdatedAt.Format(time.RFC3339),
+	}, nil
 }

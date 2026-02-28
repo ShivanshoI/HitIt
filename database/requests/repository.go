@@ -8,6 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 const CollectionName = "requests"
@@ -17,9 +18,20 @@ type RequestRepository struct {
 }
 
 func NewRequestRepository(db *mongo.Database) *RequestRepository {
-	return &RequestRepository{
+	repo := &RequestRepository{
 		collection: db.Collection(CollectionName),
 	}
+
+	// Ensure performance on ListByCollectionID
+	indexModel := mongo.IndexModel{
+		Keys: bson.D{{"collection_id", 1}},
+	}
+	_, err := repo.collection.Indexes().CreateOne(context.Background(), indexModel)
+	if err != nil {
+		log.Printf("[REPO] Failed to create index on collection_id: %v", err)
+	}
+
+	return repo
 }
 
 // Create inserts a new request into the database
@@ -75,6 +87,38 @@ func (r *RequestRepository) ListByCollectionID(ctx context.Context, collectionID
 	if err = cursor.All(ctx, &requests); err != nil {
 		return nil, err
 	}
+	return requests, nil
+}
+
+// ListSummariesByCollectionID retrieves lightweight request summaries for a specific collection
+func (r *RequestRepository) ListSummariesByCollectionID(ctx context.Context, collectionID string) ([]APIRequestSummary, error) {
+	objCollectionID, err := primitive.ObjectIDFromHex(collectionID)
+	if err != nil {
+		return nil, err
+	}
+
+	opts := options.Find().SetProjection(bson.M{
+		"_id":           1,
+		"collection_id": 1,
+		"name":          1,
+		"method":        1,
+	})
+
+	cursor, err := r.collection.Find(ctx, bson.M{"collection_id": objCollectionID}, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var requests []APIRequestSummary
+	if err = cursor.All(ctx, &requests); err != nil {
+		return nil, err
+	}
+
+	if requests == nil {
+		requests = make([]APIRequestSummary, 0)
+	}
+
 	return requests, nil
 }
 

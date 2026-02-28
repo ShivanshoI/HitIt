@@ -20,7 +20,8 @@ func NewRequestHandler(service *RequestService) *RequestHandler {
 
 func (h *RequestHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST "+internal.APIPrefix+"/requests", middleware.Auth(http.HandlerFunc(h.Create)))
-	mux.Handle("GET "+internal.APIPrefix+"/requests/collection/{collectionID}", middleware.Auth(http.HandlerFunc(h.ListByCollection)))
+	mux.Handle("GET "+internal.APIPrefix+"/requests/collections/{collectionID}", middleware.Auth(http.HandlerFunc(h.ListByCollection)))
+	mux.Handle("GET "+internal.APIPrefix+"/requests/{requestID}", middleware.Auth(http.HandlerFunc(h.GetByID)))
 }
 
 func (h *RequestHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -64,4 +65,24 @@ func (h *RequestHandler) ListByCollection(w http.ResponseWriter, r *http.Request
 	}
 
 	internal.SuccessResponse(w, http.StatusOK, requestsList)
+}
+
+func (h *RequestHandler) GetByID(w http.ResponseWriter, r *http.Request) {
+	requestID := r.PathValue("requestID")
+	if requestID == "" {
+		internal.ErrorResponse(w, internal.NewBadRequest("requestID is required"))
+		return
+	}
+
+	req, err := h.service.GetByID(r.Context(), requestID)
+	if err != nil {
+		if appErr, ok := err.(*internal.AppError); ok {
+			internal.ErrorResponse(w, appErr)
+		} else {
+			internal.ErrorResponse(w, internal.NewInternalError("get request failed"))
+		}
+		return
+	}
+
+	internal.SuccessResponse(w, http.StatusOK, req)
 }

@@ -25,3 +25,10 @@ type APIRequest struct {
 	CreatedAt    time.Time          `bson:"created_at" json:"created_at"`
 	UpdatedAt    time.Time          `bson:"updated_at" json:"updated_at"`
 }
+
+type APIRequestSummary struct {
+	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	CollectionID primitive.ObjectID `bson:"collection_id" json:"collection_id"`
+	Name         string             `bson:"name" json:"name"`
+	Method       string             `bson:"method" json:"method"`
+}

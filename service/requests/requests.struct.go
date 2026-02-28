@@ -29,3 +29,10 @@ type CreateRequestDTO struct {
 	Body         string         `json:"body"`
 	Auth         string         `json:"auth"`
 }
+
+type RequestSummaryResponse struct {
+	ID           string `json:"id"`
+	CollectionID string `json:"collection_id"`
+	Name         string `json:"name"`
+	Method       string `json:"method"`
+}

@@ -160,3 +160,36 @@ func (s *RequestService) GetByID(ctx context.Context, requestID string) (*Reques
 		UpdatedAt:    req.UpdatedAt.Format(time.RFC3339),
 	}, nil
 }
+
+func (s *RequestService) Update(ctx context.Context, requestID string, payload *UpdateRequestDTO, userID string) (*RequestResponse, error) {
+	req, err := s.repo.GetByID(ctx, requestID)
+	if err != nil {
+		return nil, internal.NewNotFound("Request not found")
+	}
+
+	req.Name = payload.Name
+	req.Method = payload.Method
+	req.URL = payload.URL
+
+	dbHeaders := make([]requests.KeyValuePair, len(payload.Headers))
+	for i, h := range payload.Headers {
+		dbHeaders[i] = requests.KeyValuePair{Key: h.Key, Value: h.Value}
+	}
+	req.Headers = dbHeaders
+
+	dbParams := make([]requests.KeyValuePair, len(payload.Params))
+	for i, p := range payload.Params {
+		dbParams[i] = requests.KeyValuePair{Key: p.Key, Value: p.Value}
+	}
+	req.Params = dbParams
+
+	req.Body = payload.Body
+	req.Auth = payload.Auth
+
+	_, err = s.repo.Update(ctx, requestID, req)
+	if err != nil {
+		return nil, internal.NewInternalError("Failed to update request")
+	}
+
+	return s.GetByID(ctx, requestID)
+}

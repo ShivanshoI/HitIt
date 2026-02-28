@@ -30,6 +30,16 @@ type CreateRequestDTO struct {
 	Auth         string         `json:"auth"`
 }
 
+type UpdateRequestDTO struct {
+	Name    string         `json:"name"`
+	Method  string         `json:"method"`
+	URL     string         `json:"url"`
+	Headers []KeyValuePair `json:"headers"`
+	Params  []KeyValuePair `json:"params"`
+	Body    string         `json:"body"`
+	Auth    string         `json:"auth"`
+}
+
 type RequestSummaryResponse struct {
 	ID           string `json:"id"`
 	CollectionID string `json:"collection_id"`

@@ -22,6 +22,7 @@ func (h *RequestHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST "+internal.APIPrefix+"/requests", middleware.Auth(http.HandlerFunc(h.Create)))
 	mux.Handle("GET "+internal.APIPrefix+"/requests/collections/{collectionID}", middleware.Auth(http.HandlerFunc(h.ListByCollection)))
 	mux.Handle("GET "+internal.APIPrefix+"/requests/{requestID}", middleware.Auth(http.HandlerFunc(h.GetByID)))
+	mux.Handle("PUT "+internal.APIPrefix+"/requests/{requestID}", middleware.Auth(http.HandlerFunc(h.Update)))
 }
 
 func (h *RequestHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -84,5 +85,38 @@ func (h *RequestHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	internal.SuccessResponse(w, http.StatusOK, req)
+}
+
+func (h *RequestHandler) Update(w http.ResponseWriter, r *http.Request) {
+	requestID := r.PathValue("requestID")
+	if requestID == "" {
+		internal.ErrorResponse(w, internal.NewBadRequest("requestID is required"))
+		return
+	}
+
+	var payload UpdateRequestDTO
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		log.Printf("[HANDLER] Request Update - JSON decode error: %v", err)
+		internal.ErrorResponse(w, internal.NewBadRequest("invalid payload"))
+		return
+	}
+
+	userID, ok := r.Context().Value(internal.UserIDKey).(string)
+	if !ok {
+		internal.ErrorResponse(w, internal.NewUnauthorized("unauthorized"))
+		return
+	}
+
+	req, err := h.service.Update(r.Context(), requestID, &payload, userID)
+	if err != nil {
+		if appErr, ok := err.(*internal.AppError); ok {
+			internal.ErrorResponse(w, appErr)
+		} else {
+			internal.ErrorResponse(w, internal.NewInternalError("update request failed"))
+		}
+		return
+	}
+	
 	internal.SuccessResponse(w, http.StatusOK, req)
 }

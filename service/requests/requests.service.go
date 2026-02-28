@@ -22,8 +22,8 @@ func NewRequestService(repo *requests.RequestRepository, collectionRepo *collect
 	}
 }
 
-func (s *RequestService) Create(ctx context.Context, payload *CreateRequestDTO) (*RequestResponse, error) {
-	userId, err := primitive.ObjectIDFromHex(payload.UserID)
+func (s *RequestService) Create(ctx context.Context, payload *CreateRequestDTO, userID string) (*RequestResponse, error) {
+	userId, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
 		return nil, internal.NewBadRequest("invalid user id")
 	}
@@ -98,7 +98,6 @@ func (s *RequestService) Create(ctx context.Context, payload *CreateRequestDTO) 
 
 	return &RequestResponse{
 		ID:           req.ID.Hex(),
-		UserID:       req.UserID.Hex(),
 		CollectionID: req.CollectionID.Hex(),
 		Name:         req.Name,
 		Method:       req.Method,
@@ -132,7 +131,6 @@ func (s *RequestService) ListByCollection(ctx context.Context, collectionID stri
 
 		responses = append(responses, RequestResponse{
 			ID:           req.ID.Hex(),
-			UserID:       req.UserID.Hex(),
 			CollectionID: req.CollectionID.Hex(),
 			Name:         req.Name,
 			Method:       req.Method,

@@ -7,7 +7,6 @@ type KeyValuePair struct {
 
 type RequestResponse struct {
 	ID           string         `json:"id"`
-	UserID       string         `json:"user_id"`
 	CollectionID string         `json:"collection_id"`
 	Name         string         `json:"name"`
 	Method       string         `json:"method"`
@@ -21,7 +20,6 @@ type RequestResponse struct {
 }
 
 type CreateRequestDTO struct {
-	UserID       string         `json:"user_id"`
 	CollectionID string         `json:"collection_id"`
 	Name         string         `json:"name"`
 	Method       string         `json:"method"`

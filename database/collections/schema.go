@@ -15,6 +15,7 @@ type Collection struct {
 	Accent_Color   string             `bson:"accent_color" json:"accent_color"`
 	Pattern        string             `bson:"pattern" json:"pattern"`
 	TotalRequests  int                `bson:"total_requests" json:"total_requests"`
+	Favorite       bool               `bson:"favorite" json:"favorite"`
 	CreatedAt      time.Time          `bson:"created_at" json:"created_at"`
 	UpdatedAt      time.Time          `bson:"updated_at" json:"updated_at"`
 }

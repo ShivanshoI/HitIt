@@ -20,7 +20,6 @@ func NewCollectionHandler(service *CollectionService) *CollectionHandler {
 
 func (h *CollectionHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST "+internal.APIPrefix+"/collections", middleware.Auth(http.HandlerFunc(h.Create)))
-	mux.HandleFunc("GET "+internal.APIPrefix+"/collections/user/{userID}", h.ListByUser)
 	mux.Handle("GET "+internal.APIPrefix+"/collections", middleware.Auth(http.HandlerFunc(h.List)))
 }
 
@@ -37,14 +36,12 @@ func (h *CollectionHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payload.UserID = userID // Force the userID from the token
-
 	if !payload.IsValid() {
 		internal.ErrorResponse(w, internal.NewBadRequest("invalid default_method"))
 		return
 	}
 
-	collection, err := h.service.Create(r.Context(), &payload)
+	collection, err := h.service.Create(r.Context(), &payload, userID)
 	if err != nil {
 		if appErr, ok := err.(*internal.AppError); ok {
 			internal.ErrorResponse(w, appErr)
@@ -58,9 +55,9 @@ func (h *CollectionHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CollectionHandler) ListByUser(w http.ResponseWriter, r *http.Request) {
-	userID := r.PathValue("userID")
-	if userID == "" {
-		internal.ErrorResponse(w, internal.NewBadRequest("userID is required"))
+	userID, ok := r.Context().Value(internal.UserIDKey).(string)
+	if !ok {
+		internal.ErrorResponse(w, internal.NewUnauthorized("unauthorized"))
 		return
 	}
 

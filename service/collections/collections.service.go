@@ -23,8 +23,8 @@ func NewCollectionService(repo *collections.CollectionRepository, constRepo *con
 	}
 }
 
-func (s *CollectionService) Create(ctx context.Context, payload *CreateCollectionDTO) (*CollectionResponse, error) {
-	userId, err := primitive.ObjectIDFromHex(payload.UserID)
+func (s *CollectionService) Create(ctx context.Context, payload *CreateCollectionDTO, userID string) (*CollectionResponse, error) {
+	userId, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
 		return nil, internal.NewBadRequest("invalid user id")
 	}
@@ -37,6 +37,7 @@ func (s *CollectionService) Create(ctx context.Context, payload *CreateCollectio
 		Accent_Color:   payload.Accent_Color,
 		Pattern:        payload.Pattern,
 		TotalRequests:  0,
+		Favorite:       payload.Favorite,
 	}
 
 	collection, err := s.repo.Create(ctx, collectionModel)
@@ -52,12 +53,12 @@ func (s *CollectionService) Create(ctx context.Context, payload *CreateCollectio
 	return &CollectionResponse{
 		ID:             collection.ID.Hex(),
 		Name:           collection.Name,
-		UserID:         collection.UserID.Hex(),
 		Tags:           tags,
 		Default_Method: collection.Default_Method,
 		Accent_Color:   collection.Accent_Color,
 		Pattern:        collection.Pattern,
 		TotalRequests:  collection.TotalRequests,
+		Favorite:       collection.Favorite,
 		CreatedAt:      collection.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:      collection.UpdatedAt.Format(time.RFC3339),
 	}, nil
@@ -78,11 +79,11 @@ func (s *CollectionService) ListByUser(ctx context.Context, userID string) ([]Co
 		responses = append(responses, CollectionResponse{
 			ID:             col.ID.Hex(),
 			Name:           col.Name,
-			UserID:         col.UserID.Hex(),
 			Tags:           tags,
 			Default_Method: col.Default_Method,
 			Accent_Color:   col.Accent_Color,
 			Pattern:        col.Pattern,
+			Favorite:       col.Favorite,
 			CreatedAt:      col.CreatedAt.Format(time.RFC3339),
 			UpdatedAt:      col.UpdatedAt.Format(time.RFC3339),
 		})
@@ -152,11 +153,11 @@ func (s *CollectionService) ListAllCollection(ctx context.Context, userID string
 		responses = append(responses, CollectionResponse{
 			ID:             col.ID.Hex(),
 			Name:           col.Name,
-			UserID:         col.UserID.Hex(),
 			Tags:           tags,
 			Default_Method: col.Default_Method,
 			Accent_Color:   col.Accent_Color,
 			Pattern:        col.Pattern,
+			Favorite:       col.Favorite,
 			CreatedAt:      col.CreatedAt.Format(time.RFC3339),
 			UpdatedAt:      col.UpdatedAt.Format(time.RFC3339),
 		})

@@ -3,12 +3,12 @@ package collections
 type CollectionResponse struct {
 	ID             string   `json:"id"`
 	Name           string   `json:"name"`
-	UserID         string   `json:"user_id"`
 	Tags           []string `json:"tags"`
 	Default_Method string   `json:"default_method"`
 	Accent_Color   string   `json:"accent_color"`
 	Pattern        string   `json:"pattern"`
 	TotalRequests  int      `json:"total_requests"`
+	Favorite       bool     `json:"favorite"`
 	CreatedAt      string   `json:"created_at"`
 	UpdatedAt      string   `json:"updated_at"`
 }
@@ -22,12 +22,12 @@ type PaginatedCollectionResponse struct {
 }
 
 type CreateCollectionDTO struct {
-	UserID         string   `json:"user_id"`
 	Name           string   `json:"name"`
 	Tags           []string `json:"tags"`
 	Default_Method string   `json:"default_method"`
 	Accent_Color   string   `json:"accent_color"`
 	Pattern        string   `json:"pattern"`
+	Favorite       bool     `json:"favorite"`
 }
 
 func (d *CreateCollectionDTO) IsValid() bool {

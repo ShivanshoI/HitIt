@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"pog/internal"
+	"pog/middleware"
 )
 
 type RequestHandler struct {
@@ -18,8 +19,8 @@ func NewRequestHandler(service *RequestService) *RequestHandler {
 }
 
 func (h *RequestHandler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("POST "+internal.APIPrefix+"/requests", h.Create)
-	mux.HandleFunc("GET "+internal.APIPrefix+"/requests/collection/{collectionID}", h.ListByCollection)
+	mux.Handle("POST "+internal.APIPrefix+"/requests", middleware.Auth(http.HandlerFunc(h.Create)))
+	mux.Handle("GET "+internal.APIPrefix+"/requests/collection/{collectionID}", middleware.Auth(http.HandlerFunc(h.ListByCollection)))
 }
 
 func (h *RequestHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -30,7 +31,13 @@ func (h *RequestHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req, err := h.service.Create(r.Context(), &payload)
+	userID, ok := r.Context().Value(internal.UserIDKey).(string)
+	if !ok {
+		internal.ErrorResponse(w, internal.NewUnauthorized("unauthorized"))
+		return
+	}
+
+	req, err := h.service.Create(r.Context(), &payload, userID)
 	if err != nil {
 		if appErr, ok := err.(*internal.AppError); ok {
 			internal.ErrorResponse(w, appErr)

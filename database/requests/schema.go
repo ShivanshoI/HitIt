@@ -22,6 +22,7 @@ type APIRequest struct {
 	Params       []KeyValuePair     `bson:"params" json:"params"`
 	Body         string             `bson:"body" json:"body"`
 	Auth         string             `bson:"auth" json:"auth"`
+	Note         string             `bson:"note" json:"note"`
 	CreatedAt    time.Time          `bson:"created_at" json:"created_at"`
 	UpdatedAt    time.Time          `bson:"updated_at" json:"updated_at"`
 }

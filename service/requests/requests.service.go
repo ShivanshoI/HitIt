@@ -106,6 +106,7 @@ func (s *RequestService) Create(ctx context.Context, payload *CreateRequestDTO, 
 		Params:       respParams,
 		Body:         req.Body,
 		Auth:         req.Auth,
+		Note:         req.Note,
 		CreatedAt:    req.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:    req.UpdatedAt.Format(time.RFC3339),
 	}, nil
@@ -156,6 +157,7 @@ func (s *RequestService) GetByID(ctx context.Context, requestID string) (*Reques
 		Params:       respParams,
 		Body:         req.Body,
 		Auth:         req.Auth,
+		Note:         req.Note,
 		CreatedAt:    req.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:    req.UpdatedAt.Format(time.RFC3339),
 	}, nil
@@ -189,6 +191,42 @@ func (s *RequestService) Update(ctx context.Context, requestID string, payload *
 	_, err = s.repo.Update(ctx, requestID, req)
 	if err != nil {
 		return nil, internal.NewInternalError("Failed to update request")
+	}
+
+	return s.GetByID(ctx, requestID)
+}
+
+func (s *RequestService) UpdateFields(ctx context.Context, requestID string, fields map[string]interface{}, userID string) (*RequestResponse, error) {
+	_, err := s.repo.GetByID(ctx, requestID)
+	if err != nil {
+		return nil, internal.NewNotFound("Request not found")
+	}
+
+	allowedFields := map[string]bool{
+		"name":    true,
+		"method":  true,
+		"url":     true,
+		"headers": true,
+		"params":  true,
+		"body":    true,
+		"auth":    true,
+		"note":    true,
+	}
+
+	updateData := make(map[string]interface{})
+	for k, v := range fields {
+		if allowedFields[k] {
+			updateData[k] = v
+		}
+	}
+
+	if len(updateData) == 0 {
+		return nil, internal.NewBadRequest("No valid fields provided for update")
+	}
+
+	err = s.repo.UpdateFields(ctx, requestID, updateData)
+	if err != nil {
+		return nil, internal.NewInternalError("Failed to update request fields")
 	}
 
 	return s.GetByID(ctx, requestID)

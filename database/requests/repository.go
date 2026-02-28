@@ -24,7 +24,7 @@ func NewRequestRepository(db *mongo.Database) *RequestRepository {
 
 	// Ensure performance on ListByCollectionID
 	indexModel := mongo.IndexModel{
-		Keys: bson.D{{"collection_id", 1}},
+		Keys: bson.D{{Key: "collection_id", Value: 1}},
 	}
 	_, err := repo.collection.Indexes().CreateOne(context.Background(), indexModel)
 	if err != nil {
@@ -139,6 +139,22 @@ func (r *RequestRepository) Update(ctx context.Context, id string, request *APIR
 		return nil, err
 	}
 	return request, nil
+}
+
+// UpdateFields modifies specific fields of a request
+func (r *RequestRepository) UpdateFields(ctx context.Context, id string, fields map[string]interface{}) error {
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return err
+	}
+
+	fields["updated_at"] = time.Now()
+	update := bson.M{
+		"$set": fields,
+	}
+
+	_, err = r.collection.UpdateOne(ctx, bson.M{"_id": objID}, update)
+	return err
 }
 
 // Delete removes a request from the database

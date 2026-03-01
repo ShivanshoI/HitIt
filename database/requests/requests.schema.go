@@ -24,6 +24,7 @@ type APIRequest struct {
 	Body         string             `bson:"body" json:"body"`
 	Auth         string             `bson:"auth" json:"auth"`
 	Note         string             `bson:"note" json:"note"`
+	WritePermission bool            `bson:"write_permission" json:"write_permission"`
 	CreatedAt    time.Time          `bson:"created_at" json:"created_at"`
 	UpdatedAt    time.Time          `bson:"updated_at" json:"updated_at"`
 }

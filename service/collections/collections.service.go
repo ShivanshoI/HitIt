@@ -37,6 +37,7 @@ func (s *CollectionService) Create(ctx context.Context, payload *CreateCollectio
 		Pattern:        payload.Pattern,
 		TotalRequests:  0,
 		Favorite:       payload.Favorite,
+		WritePermission: true,
 	}
 
 	collection, err := s.repo.Create(ctx, collectionModel)

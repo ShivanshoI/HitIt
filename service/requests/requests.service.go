@@ -61,6 +61,7 @@ func (s *RequestService) Create(ctx context.Context, payload *CreateRequestDTO, 
 		Params:       dbParams,
 		Body:         payload.Body,
 		Auth:         payload.Auth,
+		WritePermission: true,
 	}
 
 	req, err := s.repo.Create(ctx, reqModel)

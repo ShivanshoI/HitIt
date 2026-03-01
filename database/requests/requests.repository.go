@@ -61,6 +61,36 @@ func (r *RequestRepository) Create(ctx context.Context, request *APIRequest) (*A
 	return request, nil
 }
 
+// BulkCreate inserts multiple requests into the database
+func (r *RequestRepository) BulkCreate(ctx context.Context, requests []interface{}) error {
+	if len(requests) == 0 {
+		return nil
+	}
+	
+	for _, req := range requests {
+		if apiReq, ok := req.(*APIRequest); ok {
+			if apiReq.ID.IsZero() {
+				apiReq.ID = primitive.NewObjectID()
+			}
+			if apiReq.MasterID.IsZero() {
+				apiReq.MasterID = apiReq.ID
+			}
+			apiReq.CreatedAt = time.Now()
+			apiReq.UpdatedAt = time.Now()
+		}
+	}
+
+	opts := options.InsertMany().SetOrdered(false)
+	_, err := r.collection.InsertMany(ctx, requests, opts)
+	if err != nil {
+		log.Printf("[REPO] Bulk insert error: %v", err)
+		return err
+	}
+	
+	log.Printf("[REPO] Successfully bulk inserted %d requests", len(requests))
+	return nil
+}
+
 // GetByID retrieves a request by its ID
 func (r *RequestRepository) GetByID(ctx context.Context, id string) (*APIRequest, error) {
 	objID, err := primitive.ObjectIDFromHex(id)

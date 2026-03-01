@@ -1,0 +1,154 @@
+package collaborators
+
+import (
+	"context"
+	"pog/database/collaborators"
+	"pog/database/collections"
+	"pog/database/requests"
+	"pog/internal"
+	"strconv"
+	"strings"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
+)
+
+type CollaboratorService struct {
+	repo           *collaborators.CollaboratorRepository
+	collectionRepo *collections.CollectionRepository
+	requestRepo    *requests.RequestRepository
+}
+
+func NewCollaboratorService(repo *collaborators.CollaboratorRepository, collectionRepo *collections.CollectionRepository, requestRepo *requests.RequestRepository) *CollaboratorService {
+	return &CollaboratorService{
+		repo:           repo,
+		collectionRepo: collectionRepo,
+		requestRepo:    requestRepo,
+	}
+}
+
+func (s *CollaboratorService) ImportDistributer(ctx context.Context, userID string, shareLink string) (string, error) {
+	linkPayload := linkParser(shareLink)
+
+	if linkPayload.EntityType == "c" {
+		return s.importCollection(ctx, userID, linkPayload)
+	} else if linkPayload.EntityType == "r" {
+		return s.importRequest(ctx, userID, linkPayload)
+	}
+
+	return "failed", internal.NewBadRequest("only collections and requests can be imported currently")
+}
+
+func (s *CollaboratorService) importCollection(ctx context.Context, userID string, linkPayload LinkPayload) (string, error) {
+	objUserID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return "failed", internal.NewBadRequest("invalid user id")
+	}
+
+	originalCol, err := s.collectionRepo.GetByID(ctx, linkPayload.IDString)
+	if err != nil {
+		return "failed", internal.NewNotFound("original collection not found")
+	}
+
+	newCol := &collections.Collection{
+		UserID:          objUserID,
+		MasterID:        originalCol.MasterID,
+		Name:            originalCol.Name,
+		Tags:            originalCol.Tags,
+		Default_Method:  originalCol.Default_Method,
+		Accent_Color:    originalCol.Accent_Color,
+		Pattern:         originalCol.Pattern,
+		WritePermission: linkPayload.Permission,
+	}
+
+	_, err = s.collectionRepo.Create(ctx, newCol)
+	if err != nil {
+		return "failed", err
+	}
+
+	// 4. Clone requests in background
+	go func(colID string, newColID primitive.ObjectID, masterID primitive.ObjectID, userID primitive.ObjectID, writePermission bool) {
+		bgCtx := context.Background()
+
+		originalRequests, err := s.requestRepo.ListByCollectionID(bgCtx, colID)
+		if err != nil || len(originalRequests) == 0 {
+			// use a logger here (e.g., log.Printf) instead of returning
+			return
+		}
+
+		newRequests := make([]interface{}, len(originalRequests))
+		for i, req := range originalRequests {
+			clonedReq := &requests.APIRequest{
+				UserID:          userID,
+				MasterID:        req.MasterID,
+				CollectionID:    newColID,
+				Name:            req.Name,
+				Method:          req.Method,
+				URL:             req.URL,
+				Headers:         req.Headers,
+				Params:          req.Params,
+				Body:            req.Body,
+				Auth:            req.Auth,
+				Note:            req.Note,
+				WritePermission: writePermission,
+			}
+			newRequests[i] = clonedReq
+		}
+
+		err = s.requestRepo.BulkCreate(bgCtx, newRequests)
+		if err != nil {
+			// use a logger here
+			return
+		}
+	}(linkPayload.IDString, newCol.ID, newCol.MasterID, objUserID, newCol.WritePermission)
+
+	return "success", nil
+}
+
+func (s *CollaboratorService) importRequest(ctx context.Context, userID string, linkPayload LinkPayload) (string, error) {
+	objUserID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return "failed", internal.NewBadRequest("invalid user id")
+	}
+
+	originalReq, err := s.requestRepo.GetByID(ctx, linkPayload.IDString)
+	if err != nil {
+		return "failed", internal.NewNotFound("original request not found")
+	}
+
+	clonedReq := &requests.APIRequest{
+		UserID:          objUserID,
+		MasterID:        originalReq.MasterID,
+		Name:            originalReq.Name,
+		Method:          originalReq.Method,
+		URL:             originalReq.URL,
+		Headers:         originalReq.Headers,
+		Params:          originalReq.Params,
+		Body:            originalReq.Body,
+		Auth:            originalReq.Auth,
+		Note:            originalReq.Note,
+		WritePermission: linkPayload.Permission,
+	}
+
+	_, err = s.requestRepo.Create(ctx, clonedReq)
+	if err != nil {
+		return "failed", err
+	}
+
+	return "success", nil
+}
+
+func linkParser(link string) (linkPayload LinkPayload) {
+	parts := strings.Split(link, "/")
+	if len(parts) == 0 {
+		return
+	}
+	code := parts[len(parts)-1]
+	codeParts := strings.Split(code, "-")
+
+	linkPayload.EntityType = codeParts[0] // 'c' or 'r
+	linkPayload.Permission, _ = strconv.ParseBool(codeParts[1])  // 'ro' or 'rw'
+	linkPayload.IDString = codeParts[2]
+	
+
+	return linkPayload
+}

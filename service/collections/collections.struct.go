@@ -2,6 +2,7 @@ package collections
 
 type CollectionResponse struct {
 	ID             string   `json:"id"`
+	MasterID       string   `json:"master_id"`
 	Name           string   `json:"name"`
 	Tags           []string `json:"tags"`
 	Default_Method string   `json:"default_method"`
@@ -23,6 +24,7 @@ type PaginatedCollectionResponse struct {
 
 type CreateCollectionDTO struct {
 	Name           string   `json:"name"`
+	MasterID       string   `json:"master_id"`
 	Tags           []string `json:"tags"`
 	Default_Method string   `json:"default_method"`
 	Accent_Color   string   `json:"accent_color"`

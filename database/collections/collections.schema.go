@@ -8,6 +8,7 @@ import (
 
 type Collection struct {
 	ID             primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	MasterID       primitive.ObjectID `bson:"master_id" json:"master_id"`
 	UserID         primitive.ObjectID `bson:"user_id" json:"user_id"`
 	Name           string             `bson:"name" json:"name"`
 	Tags           *[]string          `bson:"tags,omitempty" json:"tags,omitempty"`

@@ -28,9 +28,10 @@ func (s *CollectionService) Create(ctx context.Context, payload *CreateCollectio
 	if err != nil {
 		return nil, internal.NewBadRequest("invalid user id")
 	}
-
+	id := primitive.NewObjectID()
 	collectionModel := &collections.Collection{
 		UserID:         userId,
+		MasterID:       id,
 		Name:           payload.Name,
 		Tags:           &payload.Tags,
 		Default_Method: payload.Default_Method,

@@ -28,10 +28,8 @@ func (s *CollectionService) Create(ctx context.Context, payload *CreateCollectio
 	if err != nil {
 		return nil, internal.NewBadRequest("invalid user id")
 	}
-	id := primitive.NewObjectID()
 	collectionModel := &collections.Collection{
 		UserID:         userId,
-		MasterID:       id,
 		Name:           payload.Name,
 		Tags:           &payload.Tags,
 		Default_Method: payload.Default_Method,
@@ -53,6 +51,7 @@ func (s *CollectionService) Create(ctx context.Context, payload *CreateCollectio
 
 	return &CollectionResponse{
 		ID:             collection.ID.Hex(),
+		MasterID:       collection.MasterID.Hex(),
 		Name:           collection.Name,
 		Tags:           tags,
 		Default_Method: collection.Default_Method,
@@ -79,6 +78,7 @@ func (s *CollectionService) ListByUser(ctx context.Context, userID string) ([]Co
 		}
 		responses = append(responses, CollectionResponse{
 			ID:             col.ID.Hex(),
+			MasterID:       col.MasterID.Hex(),
 			Name:           col.Name,
 			Tags:           tags,
 			Default_Method: col.Default_Method,
@@ -154,6 +154,7 @@ func (s *CollectionService) ListAllCollection(ctx context.Context, userID string
 		}
 		responses = append(responses, CollectionResponse{
 			ID:             col.ID.Hex(),
+			MasterID:       col.MasterID.Hex(),
 			Name:           col.Name,
 			Tags:           tags,
 			Default_Method: col.Default_Method,
@@ -224,6 +225,7 @@ func (s *CollectionService) UpdateFields(ctx context.Context, collectionID strin
 
 	return &CollectionResponse{
 		ID:             updatedCol.ID.Hex(),
+		MasterID:       updatedCol.MasterID.Hex(),
 		Name:           updatedCol.Name,
 		Tags:           tags,
 		Default_Method: updatedCol.Default_Method,

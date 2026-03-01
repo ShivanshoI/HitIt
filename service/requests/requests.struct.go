@@ -7,6 +7,7 @@ type KeyValuePair struct {
 
 type RequestResponse struct {
 	ID           string         `json:"id"`
+	MasterID     string         `json:"master_id"`
 	CollectionID string         `json:"collection_id"`
 	Name         string         `json:"name"`
 	Method       string         `json:"method"`
@@ -22,6 +23,7 @@ type RequestResponse struct {
 
 type CreateRequestDTO struct {
 	CollectionID string         `json:"collection_id"`
+	MasterID     string         `json:"master_id"`
 	Name         string         `json:"name"`
 	Method       string         `json:"method"`
 	URL          string         `json:"url"`
@@ -32,18 +34,20 @@ type CreateRequestDTO struct {
 }
 
 type UpdateRequestDTO struct {
-	Name    string         `json:"name"`
-	Method  string         `json:"method"`
-	URL     string         `json:"url"`
-	Headers []KeyValuePair `json:"headers"`
-	Params  []KeyValuePair `json:"params"`
-	Body    string         `json:"body"`
-	Auth    string         `json:"auth"`
-	Note    string         `json:"note"`
+	MasterID     string         `json:"master_id"`
+	Name         string         `json:"name"`
+	Method       string         `json:"method"`
+	URL          string         `json:"url"`
+	Headers      []KeyValuePair `json:"headers"`
+	Params       []KeyValuePair `json:"params"`
+	Body         string         `json:"body"`
+	Auth         string         `json:"auth"`
+	Note         string         `json:"note"`
 }
 
 type RequestSummaryResponse struct {
 	ID           string `json:"id"`
+	MasterID     string `json:"master_id"`
 	CollectionID string `json:"collection_id"`
 	Name         string `json:"name"`
 	Method       string `json:"method"`

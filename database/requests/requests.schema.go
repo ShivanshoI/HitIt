@@ -13,6 +13,7 @@ type KeyValuePair struct {
 
 type APIRequest struct {
 	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	MasterID     primitive.ObjectID `bson:"master_id" json:"master_id"`
 	UserID       primitive.ObjectID `bson:"user_id" json:"user_id"`
 	CollectionID primitive.ObjectID `bson:"collection_id" json:"collection_id"`
 	Name         string             `bson:"name" json:"name"`
@@ -29,6 +30,7 @@ type APIRequest struct {
 
 type APIRequestSummary struct {
 	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	MasterID     primitive.ObjectID `bson:"master_id" json:"master_id"`
 	CollectionID primitive.ObjectID `bson:"collection_id" json:"collection_id"`
 	Name         string             `bson:"name" json:"name"`
 	Method       string             `bson:"method" json:"method"`

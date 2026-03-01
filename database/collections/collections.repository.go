@@ -25,7 +25,12 @@ func NewCollectionRepository(db *mongo.Database) *CollectionRepository {
 
 // Create inserts a new collection into the database
 func (r *CollectionRepository) Create(ctx context.Context, collection *Collection) (*Collection, error) {
-	collection.ID = primitive.NewObjectID()
+	if collection.ID.IsZero() {
+		collection.ID = primitive.NewObjectID()
+	}
+	if collection.MasterID.IsZero() {
+		collection.MasterID = collection.ID
+	}
 	collection.CreatedAt = time.Now()
 	collection.UpdatedAt = time.Now()
 

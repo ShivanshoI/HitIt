@@ -36,6 +36,12 @@ func NewRequestRepository(db *mongo.Database) *RequestRepository {
 
 // Create inserts a new request into the database
 func (r *RequestRepository) Create(ctx context.Context, request *APIRequest) (*APIRequest, error) {
+	if request.ID.IsZero() {
+		request.ID = primitive.NewObjectID()
+	}
+	if request.MasterID.IsZero() {
+		request.MasterID = request.ID
+	}
 	request.CreatedAt = time.Now()
 	request.UpdatedAt = time.Now()
 

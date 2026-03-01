@@ -98,6 +98,7 @@ func (s *RequestService) Create(ctx context.Context, payload *CreateRequestDTO, 
 
 	return &RequestResponse{
 		ID:           req.ID.Hex(),
+		MasterID:     req.MasterID.Hex(),
 		CollectionID: req.CollectionID.Hex(),
 		Name:         req.Name,
 		Method:       req.Method,
@@ -122,6 +123,7 @@ func (s *RequestService) ListByCollection(ctx context.Context, collectionID stri
 	for _, req := range requestsList {
 		responses = append(responses, RequestSummaryResponse{
 			ID:           req.ID.Hex(),
+			MasterID:     req.MasterID.Hex(),
 			CollectionID: req.CollectionID.Hex(),
 			Name:         req.Name,
 			Method:       req.Method,
@@ -149,6 +151,7 @@ func (s *RequestService) GetByID(ctx context.Context, requestID string) (*Reques
 
 	return &RequestResponse{
 		ID:           req.ID.Hex(),
+		MasterID:     req.MasterID.Hex(),
 		CollectionID: req.CollectionID.Hex(),
 		Name:         req.Name,
 		Method:       req.Method,

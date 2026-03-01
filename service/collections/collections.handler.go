@@ -2,6 +2,7 @@ package collections
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"pog/internal"
 	"pog/middleware"
@@ -21,6 +22,7 @@ func NewCollectionHandler(service *CollectionService) *CollectionHandler {
 func (h *CollectionHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST "+internal.APIPrefix+"/collections", middleware.Auth(http.HandlerFunc(h.Create)))
 	mux.Handle("GET "+internal.APIPrefix+"/collections", middleware.Auth(http.HandlerFunc(h.List)))
+	mux.Handle("PATCH "+internal.APIPrefix+"/collections/{collectionID}/mod/", middleware.Auth(http.HandlerFunc(h.UpdateField)))
 }
 
 func (h *CollectionHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -97,4 +99,37 @@ func (h *CollectionHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	internal.SuccessResponse(w, http.StatusOK, result)
+}
+
+func (h *CollectionHandler) UpdateField(w http.ResponseWriter, r *http.Request) {
+	collectionID := r.PathValue("collectionID")
+	if collectionID == "" {
+		internal.ErrorResponse(w, internal.NewBadRequest("collectionID is required"))
+		return
+	}
+
+	var payload map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		log.Printf("[HANDLER] Collection UpdateField - JSON decode error: %v", err)
+		internal.ErrorResponse(w, internal.NewBadRequest("invalid payload"))
+		return
+	}
+
+	userID, ok := r.Context().Value(internal.UserIDKey).(string)
+	if !ok {
+		internal.ErrorResponse(w, internal.NewUnauthorized("unauthorized"))
+		return
+	}
+
+	col, err := h.service.UpdateFields(r.Context(), collectionID, payload, userID)
+	if err != nil {
+		if appErr, ok := err.(*internal.AppError); ok {
+			internal.ErrorResponse(w, appErr)
+		} else {
+			internal.ErrorResponse(w, internal.NewInternalError("update field failed"))
+		}
+		return
+	}
+	
+	internal.SuccessResponse(w, http.StatusOK, col)
 }

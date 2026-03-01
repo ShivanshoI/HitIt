@@ -152,3 +152,19 @@ func (r *CollectionRepository) Delete(ctx context.Context, id string) error {
 	_, err = r.collection.DeleteOne(ctx, bson.M{"_id": objID})
 	return err
 }
+
+// UpdateFields updates specific fields of a collection
+func (r *CollectionRepository) UpdateFields(ctx context.Context, id string, updateData map[string]interface{}) error {
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return err
+	}
+
+	updateData["updated_at"] = time.Now()
+	update := bson.M{
+		"$set": updateData,
+	}
+
+	_, err = r.collection.UpdateOne(ctx, bson.M{"_id": objID}, update)
+	return err
+}

@@ -175,3 +175,62 @@ func (s *CollectionService) ListAllCollection(ctx context.Context, userID string
 		TotalPages:  totalPages,
 	}, nil
 }
+
+func (s *CollectionService) UpdateFields(ctx context.Context, collectionID string, fields map[string]interface{}, userID string) (*CollectionResponse, error) {
+	col, err := s.repo.GetByID(ctx, collectionID)
+	if err != nil {
+		return nil, internal.NewNotFound("Collection not found")
+	}
+
+	if col.UserID.Hex() != userID {
+		return nil, internal.NewUnauthorized("Unauthorized to modify this collection")
+	}
+
+	allowedFields := map[string]bool{
+		"name":           true,
+		"tags":           true,
+		"default_method": true,
+		"accent_color":   true,
+		"pattern":        true,
+		"favorite":       true,
+	}
+
+	updateData := make(map[string]interface{})
+	for k, v := range fields {
+		if allowedFields[k] {
+			updateData[k] = v
+		}
+	}
+
+	if len(updateData) == 0 {
+		return nil, internal.NewBadRequest("No valid fields provided for update")
+	}
+
+	err = s.repo.UpdateFields(ctx, collectionID, updateData)
+	if err != nil {
+		return nil, internal.NewInternalError("Failed to update collection fields")
+	}
+
+	updatedCol, err := s.repo.GetByID(ctx, collectionID)
+	if err != nil {
+		return nil, internal.NewInternalError("Failed to retrieve updated collection")
+	}
+
+	tags := []string{}
+	if updatedCol.Tags != nil {
+		tags = *updatedCol.Tags
+	}
+
+	return &CollectionResponse{
+		ID:             updatedCol.ID.Hex(),
+		Name:           updatedCol.Name,
+		Tags:           tags,
+		Default_Method: updatedCol.Default_Method,
+		Accent_Color:   updatedCol.Accent_Color,
+		Pattern:        updatedCol.Pattern,
+		TotalRequests:  updatedCol.TotalRequests,
+		Favorite:       updatedCol.Favorite,
+		CreatedAt:      updatedCol.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:      updatedCol.UpdatedAt.Format(time.RFC3339),
+	}, nil
+}

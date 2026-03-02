@@ -73,7 +73,7 @@ func (s *CollaboratorService) importCollection(ctx context.Context, userID strin
 	}
 
 	// 4. Clone requests in background
-	go func(colID string, newColID primitive.ObjectID, masterID primitive.ObjectID, userID primitive.ObjectID, writePermission bool) {
+	go func(colID string, newColID primitive.ObjectID, masterID primitive.ObjectID, userID primitive.ObjectID, writePermission bool, isNew bool) {
 		bgCtx := context.Background()
 
 		originalRequests, err := s.requestRepo.ListByCollectionID(bgCtx, colID)
@@ -98,6 +98,13 @@ func (s *CollaboratorService) importCollection(ctx context.Context, userID strin
 				Note:            req.Note,
 				WritePermission: writePermission,
 			}
+
+			if isNew {
+				id := primitive.NewObjectID()
+				clonedReq.ID = id
+				clonedReq.MasterID = id
+			}
+
 			newRequests[i] = clonedReq
 		}
 
@@ -106,7 +113,7 @@ func (s *CollaboratorService) importCollection(ctx context.Context, userID strin
 			// use a logger here
 			return
 		}
-	}(linkPayload.IDString, newCol.ID, newCol.MasterID, objUserID, newCol.WritePermission)
+	}(linkPayload.IDString, newCol.ID, newCol.MasterID, objUserID, newCol.WritePermission, linkPayload.IsNew)
 
 	return "success", nil
 }
@@ -136,7 +143,7 @@ func (s *CollaboratorService) importRequest(ctx context.Context, userID string, 
 		WritePermission: linkPayload.Permission,
 	}
 
-	if(linkPayload.IsNew){
+	if linkPayload.IsNew {
 		id := primitive.NewObjectID()
 		clonedReq.ID = id
 		clonedReq.MasterID = id
@@ -165,7 +172,7 @@ func linkParser(link string) (linkPayload LinkPayload) {
 	codeParts := strings.Split(code, "-")
 
 	if len(codeParts) >= 3 {
-		linkPayload.EntityType = codeParts[0]       // 'c' or 'r'
+		linkPayload.EntityType = codeParts[0]         // 'c' or 'r'
 		linkPayload.Permission = codeParts[1] == "rw" // 'ro' or 'rw'
 		linkPayload.IDString = codeParts[2]
 	}

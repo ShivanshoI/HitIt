@@ -17,4 +17,5 @@ type LinkPayload struct {
 	EntityType string `json:"entity_type"`
 	Permission bool   `json:"permission"`
 	IDString   string `json:"id_string"`
+	IsNew      bool   `json:"is_new"`
 }

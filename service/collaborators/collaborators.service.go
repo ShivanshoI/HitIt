@@ -2,11 +2,11 @@ package collaborators
 
 import (
 	"context"
+	"net/url"
 	"pog/database/collaborators"
 	"pog/database/collections"
 	"pog/database/requests"
 	"pog/internal"
-	"strconv"
 	"strings"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -29,13 +29,14 @@ func NewCollaboratorService(repo *collaborators.CollaboratorRepository, collecti
 func (s *CollaboratorService) ImportDistributer(ctx context.Context, userID string, shareLink string) (string, error) {
 	linkPayload := linkParser(shareLink)
 
-	if linkPayload.EntityType == "c" {
+	switch linkPayload.EntityType {
+	case "c":
 		return s.importCollection(ctx, userID, linkPayload)
-	} else if linkPayload.EntityType == "r" {
+	case "r":
 		return s.importRequest(ctx, userID, linkPayload)
+	default:
+		return "failed", internal.NewBadRequest("only collections and requests can be imported currently")
 	}
-
-	return "failed", internal.NewBadRequest("only collections and requests can be imported currently")
 }
 
 func (s *CollaboratorService) importCollection(ctx context.Context, userID string, linkPayload LinkPayload) (string, error) {
@@ -58,6 +59,12 @@ func (s *CollaboratorService) importCollection(ctx context.Context, userID strin
 		Accent_Color:    originalCol.Accent_Color,
 		Pattern:         originalCol.Pattern,
 		WritePermission: linkPayload.Permission,
+	}
+
+	if(linkPayload.IsNew){
+		id := primitive.NewObjectID()
+		newCol.ID = id
+		newCol.MasterID = id
 	}
 
 	_, err = s.collectionRepo.Create(ctx, newCol)
@@ -129,6 +136,12 @@ func (s *CollaboratorService) importRequest(ctx context.Context, userID string, 
 		WritePermission: linkPayload.Permission,
 	}
 
+	if(linkPayload.IsNew){
+		id := primitive.NewObjectID()
+		clonedReq.ID = id
+		clonedReq.MasterID = id
+	}
+
 	_, err = s.requestRepo.Create(ctx, clonedReq)
 	if err != nil {
 		return "failed", err
@@ -138,17 +151,26 @@ func (s *CollaboratorService) importRequest(ctx context.Context, userID string, 
 }
 
 func linkParser(link string) (linkPayload LinkPayload) {
-	parts := strings.Split(link, "/")
-	if len(parts) == 0 {
+	u, err := url.Parse(link)
+	if err != nil {
 		return
 	}
+
+	parts := strings.Split(u.Path, "/")
+	if len(parts) <= 1 {
+		return
+	}
+
 	code := parts[len(parts)-1]
 	codeParts := strings.Split(code, "-")
 
-	linkPayload.EntityType = codeParts[0] // 'c' or 'r
-	linkPayload.Permission, _ = strconv.ParseBool(codeParts[1])  // 'ro' or 'rw'
-	linkPayload.IDString = codeParts[2]
-	
+	if len(codeParts) >= 3 {
+		linkPayload.EntityType = codeParts[0]       // 'c' or 'r'
+		linkPayload.Permission = codeParts[1] == "rw" // 'ro' or 'rw'
+		linkPayload.IDString = codeParts[2]
+	}
+
+	linkPayload.IsNew = u.Query().Get("new") == "true"
 
 	return linkPayload
 }

@@ -45,9 +45,17 @@ func (s *CollaboratorService) importCollection(ctx context.Context, userID strin
 		return "failed", internal.NewBadRequest("invalid user id")
 	}
 
-	originalCol, err := s.collectionRepo.GetByID(ctx, linkPayload.IDString)
-	if err != nil {
-		return "failed", internal.NewNotFound("original collection not found")
+	var originalCol *collections.Collection
+	if linkPayload.IsNew {
+		originalCol, err = s.collectionRepo.GetByID(ctx, linkPayload.IDString)
+		if err != nil {
+			return "failed", internal.NewNotFound("original collection not found")
+		}
+	} else {
+		originalCol, err = s.collectionRepo.GetByMasterID(ctx, linkPayload.IDString)
+		if err != nil {
+			return "failed", internal.NewNotFound("original collection not found")
+		}
 	}
 
 	newCol := &collections.Collection{
@@ -59,12 +67,6 @@ func (s *CollaboratorService) importCollection(ctx context.Context, userID strin
 		Accent_Color:    originalCol.Accent_Color,
 		Pattern:         originalCol.Pattern,
 		WritePermission: linkPayload.Permission,
-	}
-
-	if(linkPayload.IsNew){
-		id := primitive.NewObjectID()
-		newCol.ID = id
-		newCol.MasterID = id
 	}
 
 	_, err = s.collectionRepo.Create(ctx, newCol)

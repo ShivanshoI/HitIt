@@ -29,14 +29,14 @@ func (s *CollectionService) Create(ctx context.Context, payload *CreateCollectio
 		return nil, internal.NewBadRequest("invalid user id")
 	}
 	collectionModel := &collections.Collection{
-		UserID:         userId,
-		Name:           payload.Name,
-		Tags:           &payload.Tags,
-		Default_Method: payload.Default_Method,
-		Accent_Color:   payload.Accent_Color,
-		Pattern:        payload.Pattern,
-		TotalRequests:  0,
-		Favorite:       payload.Favorite,
+		UserID:          userId,
+		Name:            payload.Name,
+		Tags:            &payload.Tags,
+		Default_Method:  payload.Default_Method,
+		Accent_Color:    payload.Accent_Color,
+		Pattern:         payload.Pattern,
+		TotalRequests:   0,
+		Favorite:        payload.Favorite,
 		WritePermission: true,
 	}
 
@@ -95,15 +95,26 @@ func (s *CollectionService) ListByUser(ctx context.Context, userID string) ([]Co
 	return responses, nil
 }
 
-func (s *CollectionService) ListAllCollection(ctx context.Context, userID string, page, limit int) (*PaginatedCollectionResponse, error) {
+func (s *CollectionService) ListAllCollection(ctx context.Context, userID string, page, limit int, filter string) (*PaginatedCollectionResponse, error) {
 
-	collectionsList, total, err := s.repo.ListPaginatedByUserID(ctx, userID, page, limit)
+	var collectionsList []collections.Collection
+	var total int64
+	var err error
+
+	switch filter {
+	case "share":
+		collectionsList, total, err = s.repo.ListPaginatedSharedByUserID(ctx, userID, page, limit)
+	case "fav":
+		collectionsList, total, err = s.repo.ListPaginatedFavByUserID(ctx, userID, page, limit)
+	default:
+		collectionsList, total, err = s.repo.ListPaginatedByUserID(ctx, userID, page, limit)
+	}
 	if err != nil {
-		log.Printf("[SERVICE] ListPaginatedByUserID error: %v (userID: %s)", err, userID)
+		log.Printf("[SERVICE] ListPaginated error: %v (userID: %s, filter: %s)", err, userID, filter)
 		return nil, internal.NewInternalError("Failed to list collections")
 	}
 
-	if len(collectionsList) == 0 {
+	if (filter == "" || filter == "all") && len(collectionsList) == 0 {
 		objUserID, err := primitive.ObjectIDFromHex(userID)
 		if err == nil {
 			constItems, err := s.constRepo.ListLatestByTypeRaw(ctx, "collection", 5)

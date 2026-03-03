@@ -76,6 +76,20 @@ func (r *CollectionRepository) GetByID(ctx context.Context, id string) (*Collect
 	return &collection, nil
 }
 
+func (r *CollectionRepository) GetByMasterID(ctx context.Context, id string) (*Collection, error) {
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return nil, err
+	}
+
+	var collection Collection
+	err = r.collection.FindOne(ctx, bson.M{"master_id": objID}).Decode(&collection)
+	if err != nil {
+		return nil, err
+	}
+	return &collection, nil
+}
+
 // ListByUserID retrieves all collections for a specific user
 func (r *CollectionRepository) ListByUserID(ctx context.Context, userID string) ([]Collection, error) {
 	objUserID, err := primitive.ObjectIDFromHex(userID)
@@ -83,7 +97,8 @@ func (r *CollectionRepository) ListByUserID(ctx context.Context, userID string) 
 		return nil, err
 	}
 
-	cursor, err := r.collection.Find(ctx, bson.M{"user_id": objUserID})
+	opts := options.Find().SetSort(bson.M{"updated_at": -1})
+	cursor, err := r.collection.Find(ctx, bson.M{"user_id": objUserID}, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +128,80 @@ func (r *CollectionRepository) ListPaginatedByUserID(ctx context.Context, userID
 	findOptions := options.Find()
 	findOptions.SetSkip(int64((page - 1) * limit))
 	findOptions.SetLimit(int64(limit))
-	// findOptions.SetSort(bson.M{"created_at": -1}) // Optional: Sort by newest first
+	findOptions.SetSort(bson.M{"updated_at": -1})
+
+	cursor, err := r.collection.Find(ctx, filter, findOptions)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer cursor.Close(ctx)
+
+	var paginatedCollections []Collection
+	if err = cursor.All(ctx, &paginatedCollections); err != nil {
+		return nil, 0, err
+	}
+	return paginatedCollections, total, nil
+}
+
+// ListPaginatedSharedByUserID retrieves paginated shared collections for a specific user
+func (r *CollectionRepository) ListPaginatedSharedByUserID(ctx context.Context, userID string, page int, limit int) ([]Collection, int64, error) {
+	objUserID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Shared collections are those where user_id matches but _id != master_id
+	filter := bson.M{
+		"user_id": objUserID,
+		"$expr": bson.M{
+			"$ne": bson.A{"$_id", "$master_id"},
+		},
+	}
+
+	total, err := r.collection.CountDocuments(ctx, filter)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	findOptions := options.Find()
+	findOptions.SetSkip(int64((page - 1) * limit))
+	findOptions.SetLimit(int64(limit))
+	findOptions.SetSort(bson.M{"updated_at": -1})
+
+	cursor, err := r.collection.Find(ctx, filter, findOptions)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer cursor.Close(ctx)
+
+	var paginatedCollections []Collection
+	if err = cursor.All(ctx, &paginatedCollections); err != nil {
+		return nil, 0, err
+	}
+	return paginatedCollections, total, nil
+}
+
+// ListPaginatedFavByUserID retrieves paginated favorite collections for a specific user
+func (r *CollectionRepository) ListPaginatedFavByUserID(ctx context.Context, userID string, page int, limit int) ([]Collection, int64, error) {
+	objUserID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	filter := bson.M{
+		"user_id":  objUserID,
+		"favorite": true,
+	}
+
+	total, err := r.collection.CountDocuments(ctx, filter)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	findOptions := options.Find()
+	findOptions.SetSkip(int64((page - 1) * limit))
+	findOptions.SetLimit(int64(limit))
+	findOptions.SetSort(bson.M{"updated_at": -1})
 
 	cursor, err := r.collection.Find(ctx, filter, findOptions)
 	if err != nil {

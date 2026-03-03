@@ -81,18 +81,19 @@ func (h *CollectionHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	pageStr := r.URL.Query().Get("page")
 	limitStr := r.URL.Query().Get("limit")
+	filter := r.URL.Query().Get("filter")
 
 	page := 1
 	if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
 		page = p
 	}
 
-	limit := 5
+	limit := 10
 	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 		limit = l
 	}
 
-	result, err := h.service.ListAllCollection(r.Context(), userID, page, limit)
+	result, err := h.service.ListAllCollection(r.Context(), userID, page, limit, filter)
 	if err != nil {
 		internal.ErrorResponse(w, internal.NewInternalError("list paginated collections failed"))
 		return
@@ -133,3 +134,5 @@ func (h *CollectionHandler) UpdateField(w http.ResponseWriter, r *http.Request) 
 	
 	internal.SuccessResponse(w, http.StatusOK, col)
 }
+
+

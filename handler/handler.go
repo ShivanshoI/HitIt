@@ -6,6 +6,7 @@ import (
 	"pog/internal"
 	pogCollaboratorsSVC "pog/service/collaborators"
 	"pog/service/collections"
+	pogExecutionSVC "pog/service/execution"
 	pogRequestsSVC "pog/service/requests"
 	pogUsersSVC "pog/service/users"
 
@@ -31,6 +32,9 @@ func CompileHandlers(db *mongo.Database) http.Handler {
 
 	// Collaborators Module Setup
 	pogCollaboratorsSVC.InitModule(db, mux)
+
+	// Execution Module Setup
+	pogExecutionSVC.InitModule(db, mux)
 
 	return mux
 }

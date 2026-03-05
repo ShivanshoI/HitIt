@@ -19,6 +19,7 @@ func NewCollaboratorHandler(service *CollaboratorService) *CollaboratorHandler {
 
 func (h *CollaboratorHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST "+internal.APIPrefix+"/collaborators/import", middleware.Auth(http.HandlerFunc(h.SharedImportByEmail)))
+	mux.Handle("GET "+internal.APIPrefix+"/collaborators/{masterID}", middleware.Auth(http.HandlerFunc(h.GetCollaboratorsForCollection)))
 }
 
 func (h *CollaboratorHandler) SharedImportByEmail(w http.ResponseWriter, r *http.Request) {
@@ -48,4 +49,30 @@ func (h *CollaboratorHandler) SharedImportByEmail(w http.ResponseWriter, r *http
 		"status":  status,
 		"message": "imported successfully",
 	})
+}
+
+func (h *CollaboratorHandler) GetCollaboratorsForCollection(w http.ResponseWriter, r *http.Request) {
+	_, ok := r.Context().Value(internal.UserIDKey).(string)
+	if !ok {
+		internal.ErrorResponse(w, internal.NewUnauthorized("unauthorized"))
+		return
+	}
+
+	collectionID := r.PathValue("masterID")
+	if collectionID == "" {
+		internal.ErrorResponse(w, internal.NewBadRequest("collectionID is required"))
+		return
+	}
+
+	collaborators, err := h.service.GetCollaboratorsForCollection(r.Context(), collectionID)
+	if err != nil {
+		if appErr, ok := err.(*internal.AppError); ok {
+			internal.ErrorResponse(w, appErr)
+		} else {
+			internal.ErrorResponse(w, internal.NewInternalError("failed to get collaborators"))
+		}
+		return
+	}
+
+	internal.SuccessResponse(w, http.StatusOK, collaborators)
 }

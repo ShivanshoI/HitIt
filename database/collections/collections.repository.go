@@ -61,6 +61,26 @@ func (r *CollectionRepository) FindAllByUserID(ctx context.Context, userID strin
 	return collections, nil
 }
 
+// FindAllByMasterID retrieves all collections with exactly this master_id
+func (r *CollectionRepository) FindAllByMasterID(ctx context.Context, masterID string) ([]Collection, error) {
+	objID, err := primitive.ObjectIDFromHex(masterID)
+	if err != nil {
+		return nil, err
+	}
+
+	cursor, err := r.collection.Find(ctx, bson.M{"master_id": objID})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var collections []Collection
+	if err = cursor.All(ctx, &collections); err != nil {
+		return nil, err
+	}
+	return collections, nil
+}
+
 // GetByID retrieves a collection by its ID
 func (r *CollectionRepository) GetByID(ctx context.Context, id string) (*Collection, error) {
 	objID, err := primitive.ObjectIDFromHex(id)

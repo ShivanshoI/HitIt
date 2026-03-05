@@ -11,6 +11,10 @@ type ImportCollaboratorDTO struct {
 }
 
 type CollaboratorResponse struct {
+	UserID          string `json:"user_id"`
+	Name            string `json:"name"`
+	EmailAddress    string `json:"email_address,omitempty"`
+	WritePermission bool   `json:"write_permission"`
 }
 
 type LinkPayload struct {

@@ -133,3 +133,26 @@ func (r *UserRepository) List(ctx context.Context) ([]User, error) {
 	}
 	return users, nil
 }
+
+// FindMultipleByIDs retrieves multiple users by their IDs
+func (r *UserRepository) FindMultipleByIDs(ctx context.Context, ids []primitive.ObjectID) ([]User, error) {
+	if len(ids) == 0 {
+		return []User{}, nil
+	}
+
+	filter := bson.M{
+		"_id": bson.M{"$in": ids},
+	}
+
+	cursor, err := r.collection.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var users []User
+	if err = cursor.All(ctx, &users); err != nil {
+		return nil, err
+	}
+	return users, nil
+}

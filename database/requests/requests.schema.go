@@ -17,6 +17,7 @@ type APIRequest struct {
 	UserID       primitive.ObjectID `bson:"user_id" json:"user_id"`
 	CollectionID primitive.ObjectID `bson:"collection_id" json:"collection_id"`
 	Name         string             `bson:"name" json:"name"`
+	Tags         []string           `bson:"tags" json:"tags"`
 	Favorite     bool               `bson:"favorite" json:"favorite"`
 	Method       string             `bson:"method" json:"method"`
 	URL          string             `bson:"url" json:"url"`

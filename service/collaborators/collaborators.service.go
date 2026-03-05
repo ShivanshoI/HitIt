@@ -6,6 +6,7 @@ import (
 	"pog/database/collaborators"
 	"pog/database/collections"
 	"pog/database/requests"
+	"pog/database/users"
 	"pog/internal"
 	"strings"
 
@@ -16,13 +17,20 @@ type CollaboratorService struct {
 	repo           *collaborators.CollaboratorRepository
 	collectionRepo *collections.CollectionRepository
 	requestRepo    *requests.RequestRepository
+	userRepo       *users.UserRepository
 }
 
-func NewCollaboratorService(repo *collaborators.CollaboratorRepository, collectionRepo *collections.CollectionRepository, requestRepo *requests.RequestRepository) *CollaboratorService {
+func NewCollaboratorService(
+	repo *collaborators.CollaboratorRepository,
+	collectionRepo *collections.CollectionRepository,
+	requestRepo *requests.RequestRepository,
+	userRepo *users.UserRepository,
+) *CollaboratorService {
 	return &CollaboratorService{
 		repo:           repo,
 		collectionRepo: collectionRepo,
 		requestRepo:    requestRepo,
+		userRepo:       userRepo,
 	}
 }
 
@@ -58,11 +66,27 @@ func (s *CollaboratorService) importCollection(ctx context.Context, userID strin
 		}
 	}
 
+	var tags []string
+	if originalCol.Tags != nil {
+		tags = append(tags, *originalCol.Tags...)
+	}
+
+	isShared := false
+	for _, t := range tags {
+		if t == "shared" {
+			isShared = true
+			break
+		}
+	}
+	if !isShared {
+		tags = append(tags, "shared")
+	}
+
 	newCol := &collections.Collection{
 		UserID:          objUserID,
 		MasterID:        originalCol.MasterID,
 		Name:            originalCol.Name,
-		Tags:            originalCol.Tags,
+		Tags:            &tags,
 		Default_Method:  originalCol.Default_Method,
 		Accent_Color:    originalCol.Accent_Color,
 		Pattern:         originalCol.Pattern,
@@ -91,6 +115,7 @@ func (s *CollaboratorService) importCollection(ctx context.Context, userID strin
 				MasterID:        req.MasterID,
 				CollectionID:    newColID,
 				Name:            req.Name,
+				Tags:            req.Tags,
 				Method:          req.Method,
 				URL:             req.URL,
 				Headers:         req.Headers,
@@ -182,4 +207,57 @@ func linkParser(link string) (linkPayload LinkPayload) {
 	linkPayload.IsNew = u.Query().Get("new") == "true"
 
 	return linkPayload
+}
+
+func (s *CollaboratorService) GetCollaboratorsForCollection(ctx context.Context, collectionID string) ([]CollaboratorResponse, error) {
+	col, err := s.collectionRepo.GetByID(ctx, collectionID)
+	if err != nil {
+		return nil, internal.NewNotFound("collection not found")
+	}
+
+	masterID := col.MasterID.Hex()
+
+	collections, err := s.collectionRepo.FindAllByMasterID(ctx, masterID)
+	if err != nil {
+		return nil, internal.NewInternalError("failed to find collections by master id")
+	}
+
+	if len(collections) == 0 {
+		return []CollaboratorResponse{}, nil
+	}
+
+	writePermissionMap := make(map[primitive.ObjectID]bool)
+	var userIDs []primitive.ObjectID
+
+	for _, col := range collections {
+		userIDs = append(userIDs, col.UserID)
+		writePermissionMap[col.UserID] = col.WritePermission
+	}
+
+	usersList, err := s.userRepo.FindMultipleByIDs(ctx, userIDs)
+	if err != nil {
+		return nil, internal.NewInternalError("failed to find users")
+	}
+
+	var responses []CollaboratorResponse
+	for _, u := range usersList {
+		email := ""
+		if u.EmailAddress != nil {
+			email = *u.EmailAddress
+		}
+
+		name := u.FirstName
+		if u.LastName != nil && *u.LastName != "" {
+			name = name + " " + *u.LastName
+		}
+
+		responses = append(responses, CollaboratorResponse{
+			UserID:          u.ID.Hex(),
+			Name:            name,
+			EmailAddress:    email,
+			WritePermission: writePermissionMap[u.ID],
+		})
+	}
+
+	return responses, nil
 }

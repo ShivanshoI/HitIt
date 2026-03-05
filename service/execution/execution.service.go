@@ -154,14 +154,20 @@ func (s *ExecutionService) ExecuteRequest(ctx context.Context, requestID string,
 	return execResult, nil
 }
 
-// GetHistory fetches the recent execution logs for a user
-func (s *ExecutionService) GetHistory(ctx context.Context, userID string) ([]history.RequestHistory, error) {
-	// Let's default to returning the last 50 records
-	historyLogs, err := s.historyRepo.ListByUserID(ctx, userID, 50)
-	if err != nil {
-		return nil, internal.NewInternalError("Failed to fetch history")
+// GetHistory fetches the recent execution logs for a user with pagination
+func (s *ExecutionService) GetHistory(ctx context.Context, userID string, page int, limit int) ([]history.RequestHistory, int64, error) {
+	if page < 1 {
+		page = 1
 	}
-	return historyLogs, nil
+	if limit < 1 {
+		limit = 50
+	}
+
+	historyLogs, total, err := s.historyRepo.ListByUserID(ctx, userID, page, limit)
+	if err != nil {
+		return nil, 0, internal.NewInternalError("Failed to fetch history")
+	}
+	return historyLogs, total, nil
 }
 
 // ClearHistory deletes all history for a user

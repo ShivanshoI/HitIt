@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"pog/internal"
 	"pog/middleware"
+	"strconv"
 )
 
 type ExecutionHandler struct {
@@ -55,13 +56,28 @@ func (h *ExecutionHandler) GetHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	history, err := h.service.GetHistory(r.Context(), userID)
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit < 1 {
+		limit = 50
+	}
+
+	history, total, err := h.service.GetHistory(r.Context(), userID, page, limit)
 	if err != nil {
 		internal.ErrorResponse(w, internal.NewInternalError("Failed to get history"))
 		return
 	}
 
-	internal.SuccessResponse(w, http.StatusOK, history)
+	internal.SuccessResponse(w, http.StatusOK, map[string]interface{}{
+		"history": history,
+		"total":   total,
+		"page":    page,
+		"limit":   limit,
+	})
 }
 
 func (h *ExecutionHandler) ClearHistory(w http.ResponseWriter, r *http.Request) {

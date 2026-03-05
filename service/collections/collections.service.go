@@ -174,6 +174,7 @@ func (s *CollectionService) ListAllCollection(ctx context.Context, userID string
 			Pattern:        col.Pattern,
 			TotalRequests:  col.TotalRequests,
 			Favorite:       col.Favorite,
+			WritePermission: col.WritePermission,
 			CreatedAt:      col.CreatedAt.Format(time.RFC3339),
 			UpdatedAt:      col.UpdatedAt.Format(time.RFC3339),
 		})

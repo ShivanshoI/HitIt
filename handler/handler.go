@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"pog/internal"
+	pogActivityFeedSVC "pog/service/activity_feed"
 	pogCollaboratorsSVC "pog/service/collaborators"
 	"pog/service/collections"
 	pogExecutionSVC "pog/service/execution"
@@ -32,6 +33,9 @@ func CompileHandlers(db *mongo.Database) http.Handler {
 
 	// Collaborators Module Setup
 	pogCollaboratorsSVC.InitModule(db, mux)
+
+	// Activity Feed Module Setup
+	pogActivityFeedSVC.InitModule(db, mux)
 
 	// Execution Module Setup
 	pogExecutionSVC.InitModule(db, mux)

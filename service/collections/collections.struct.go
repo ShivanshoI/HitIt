@@ -10,6 +10,7 @@ type CollectionResponse struct {
 	Pattern        string   `json:"pattern"`
 	TotalRequests  int      `json:"total_requests"`
 	Favorite       bool     `json:"favorite"`
+	WritePermission bool     `json:"write_permission"`
 	CreatedAt      string   `json:"created_at"`
 	UpdatedAt      string   `json:"updated_at"`
 }

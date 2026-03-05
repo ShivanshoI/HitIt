@@ -38,31 +38,39 @@ func (r *HistoryRepository) Create(ctx context.Context, history *RequestHistory)
 	return history, nil
 }
 
-func (r *HistoryRepository) ListByUserID(ctx context.Context, userID string, limit int64) ([]RequestHistory, error) {
+func (r *HistoryRepository) ListByUserID(ctx context.Context, userID string, page int, limit int) ([]RequestHistory, int64, error) {
 	objUserID, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+
+	filter := bson.M{"user_id": objUserID}
+	
+	total, err := r.collection.CountDocuments(ctx, filter)
+	if err != nil {
+		return nil, 0, err
 	}
 
 	opts := options.Find().SetSort(bson.M{"executed_at": -1})
 	if limit > 0 {
-		opts.SetLimit(limit)
+		opts.SetLimit(int64(limit))
+		opts.SetSkip(int64((page - 1) * limit))
 	}
 
-	cursor, err := r.collection.Find(ctx, bson.M{"user_id": objUserID}, opts)
+	cursor, err := r.collection.Find(ctx, filter, opts)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer cursor.Close(ctx)
 
 	var historyLogs []RequestHistory
 	if err = cursor.All(ctx, &historyLogs); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if historyLogs == nil {
 		historyLogs = []RequestHistory{}
 	}
-	return historyLogs, nil
+	return historyLogs, total, nil
 }
 
 func (r *HistoryRepository) DeleteByID(ctx context.Context, id string) error {

@@ -135,8 +135,10 @@ func (r *RequestRepository) ListSummariesByCollectionID(ctx context.Context, col
 
 	opts := options.Find().SetProjection(bson.M{
 		"_id":           1,
+		"master_id":     1,
 		"collection_id": 1,
 		"name":          1,
+		"favorite":      1,
 		"method":        1,
 	})
 

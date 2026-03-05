@@ -10,6 +10,7 @@ type RequestResponse struct {
 	MasterID        string         `json:"master_id"`
 	CollectionID    string         `json:"collection_id"`
 	Name            string         `json:"name"`
+	Favorite        bool           `json:"favorite"`
 	Method          string         `json:"method"`
 	URL             string         `json:"url"`
 	Headers      	[]KeyValuePair `json:"headers"`
@@ -26,6 +27,7 @@ type CreateRequestDTO struct {
 	CollectionID string         `json:"collection_id"`
 	MasterID     string         `json:"master_id"`
 	Name         string         `json:"name"`
+	Favorite     bool           `json:"favorite"`
 	Method       string         `json:"method"`
 	URL          string         `json:"url"`
 	Headers      []KeyValuePair `json:"headers"`
@@ -37,6 +39,7 @@ type CreateRequestDTO struct {
 type UpdateRequestDTO struct {
 	MasterID     string         `json:"master_id"`
 	Name         string         `json:"name"`
+	Favorite     bool           `json:"favorite"`
 	Method       string         `json:"method"`
 	URL          string         `json:"url"`
 	Headers      []KeyValuePair `json:"headers"`
@@ -51,6 +54,7 @@ type RequestSummaryResponse struct {
 	MasterID     string `json:"master_id"`
 	CollectionID string `json:"collection_id"`
 	Name         string `json:"name"`
+	Favorite     bool   `json:"favorite"`
 	Method       string `json:"method"`
 	Note         string `json:"note"`
 }

@@ -32,12 +32,13 @@ func (s *RequestService) Create(ctx context.Context, payload *CreateRequestDTO, 
 	if err != nil {
 		return nil, internal.NewBadRequest("invalid collection id")
 	}
+	collectionDetails, err := s.collectionRepo.GetByID(ctx, payload.CollectionID)
+	if err != nil {
+		return nil, internal.NewBadRequest("invalid collection id")
+	}
+
 	//assinging default method in case of no method is passed
 	if payload.Method == "" {
-		collectionDetails, err := s.collectionRepo.GetByID(ctx, payload.CollectionID)
-		if err != nil {
-			return nil, internal.NewBadRequest("invalid collection id")
-		}
 		payload.Method = collectionDetails.Default_Method
 	}
 
@@ -52,15 +53,16 @@ func (s *RequestService) Create(ctx context.Context, payload *CreateRequestDTO, 
 	}
 
 	reqModel := &requests.APIRequest{
-		UserID:       userId,
-		CollectionID: collectionId,
-		Name:         payload.Name,
-		Method:       payload.Method,
-		URL:          payload.URL,
-		Headers:      dbHeaders,
-		Params:       dbParams,
-		Body:         payload.Body,
-		Auth:         payload.Auth,
+		UserID:          userId,
+		CollectionID:    collectionId,
+		Name:            payload.Name,
+		Favorite:        payload.Favorite,
+		Method:          payload.Method,
+		URL:             payload.URL,
+		Headers:         dbHeaders,
+		Params:          dbParams,
+		Body:            payload.Body,
+		Auth:            payload.Auth,
 		WritePermission: true,
 	}
 
@@ -106,11 +108,13 @@ func (s *RequestService) Create(ctx context.Context, payload *CreateRequestDTO, 
 		URL:          req.URL,
 		Headers:      respHeaders,
 		Params:       respParams,
-		Body:         req.Body,
-		Auth:         req.Auth,
-		Note:         req.Note,
-		CreatedAt:    req.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:    req.UpdatedAt.Format(time.RFC3339),
+		Body:            req.Body,
+		Auth:            req.Auth,
+		Note:            req.Note,
+		Favorite:        req.Favorite,
+		WritePermission: req.WritePermission,
+		CreatedAt:       req.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:       req.UpdatedAt.Format(time.RFC3339),
 	}, nil
 }
 
@@ -127,6 +131,7 @@ func (s *RequestService) ListByCollection(ctx context.Context, collectionID stri
 			MasterID:     req.MasterID.Hex(),
 			CollectionID: req.CollectionID.Hex(),
 			Name:         req.Name,
+			Favorite:     req.Favorite,
 			Method:       req.Method,
 		})
 	}
@@ -159,11 +164,13 @@ func (s *RequestService) GetByID(ctx context.Context, requestID string) (*Reques
 		URL:          req.URL,
 		Headers:      respHeaders,
 		Params:       respParams,
-		Body:         req.Body,
-		Auth:         req.Auth,
-		Note:         req.Note,
-		CreatedAt:    req.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:    req.UpdatedAt.Format(time.RFC3339),
+		Body:            req.Body,
+		Auth:            req.Auth,
+		Note:            req.Note,
+		Favorite:        req.Favorite,
+		WritePermission: req.WritePermission,
+		CreatedAt:       req.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:       req.UpdatedAt.Format(time.RFC3339),
 	}, nil
 }
 
@@ -191,6 +198,8 @@ func (s *RequestService) Update(ctx context.Context, requestID string, payload *
 
 	req.Body = payload.Body
 	req.Auth = payload.Auth
+	req.Favorite = payload.Favorite
+	req.Note = payload.Note
 
 	_, err = s.repo.Update(ctx, requestID, req)
 	if err != nil {
@@ -215,6 +224,7 @@ func (s *RequestService) UpdateFields(ctx context.Context, requestID string, fie
 		"body":    true,
 		"auth":    true,
 		"note":    true,
+		"favorite": true,
 	}
 
 	updateData := make(map[string]interface{})

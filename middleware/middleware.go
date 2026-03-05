@@ -1,9 +1,12 @@
 package middleware
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -24,6 +27,13 @@ func (w *statusWriter) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
+func (w *statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hj, ok := w.ResponseWriter.(http.Hijacker); ok {
+		return hj.Hijack()
+	}
+	return nil, nil, fmt.Errorf("http.ResponseWriter does not implement http.Hijacker")
+}
+
 // Auth verifies the JWT token in the Authorization header or token query parameter.
 func Auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -42,15 +52,19 @@ func Auth(next http.Handler) http.Handler {
 		}
 
 		if tokenString == "" {
+			log.Printf("[AUTH] missing token for %s %s", r.Method, r.URL.Path)
 			internal.ErrorResponse(w, internal.NewUnauthorized("Authentication token is missing"))
 			return
 		}
 
 		userID, err := internal.ValidateToken(tokenString)
 		if err != nil {
+			log.Printf("[AUTH] token validation failed: %v", err)
 			internal.ErrorResponse(w, internal.NewUnauthorized("Invalid or expired token"))
 			return
 		}
+
+		log.Printf("[AUTH] authenticated user %s for %s", userID, r.URL.Path)
 
 		// Add userID to the request context
 		ctx := context.WithValue(r.Context(), internal.UserIDKey, userID)

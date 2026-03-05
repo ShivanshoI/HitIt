@@ -7,10 +7,11 @@ import (
 
 // BroadcastMessage is the internal envelope passed to Hub.Broadcast.
 type BroadcastMessage struct {
-	MasterID string
-	UserID   string // non-empty only for PersonalScope messages
-	Scope    string // "group" or "personal"
-	Data     []byte
+	MasterID      string
+	UserID        string // non-empty only for PersonalScope messages
+	ExcludeUserID string // non-empty to skip broadcasting to a specific user (e.g. the sender)
+	Scope         string // "group" or "personal"
+	Data          []byte
 }
 
 // Hub maintains the set of active clients and routes broadcast messages.
@@ -85,6 +86,10 @@ func (h *Hub) deliver(msg BroadcastMessage) {
 	case "group":
 		group := h.groups[msg.MasterID]
 		for c := range group {
+			// Skip the sender if ExcludeUserID is set
+			if msg.ExcludeUserID != "" && c.UserID == msg.ExcludeUserID {
+				continue
+			}
 			h.sendOrEvict(c, msg.Data, group, msg.MasterID)
 		}
 

@@ -31,10 +31,11 @@ func (s *ActivityFeedService) SendMessage(ctx context.Context, item *pogActivity
 	}
 
 	s.broadcast(websockets.BroadcastMessage{
-		MasterID: created.MasterID.Hex(),
-		UserID:   created.UserID.Hex(),
-		Scope:    string(created.Scope),
-		Data:     mustMarshal(created),
+		MasterID:      created.MasterID.Hex(),
+		UserID:        created.UserID.Hex(),
+		ExcludeUserID: created.UserID.Hex(), // Don't send back to the user who just posted via HTTP
+		Scope:         string(created.Scope),
+		Data:          mustMarshal(created),
 	})
 
 	return created, nil
@@ -133,8 +134,17 @@ func (s *ActivityFeedService) AIQuery(ctx context.Context, query *AIQueryDTO, us
 	// 4. Broadcast both messages for group-scoped feeds so other connected
 	//    clients see the exchange in real time.
 	if query.Scope == pogActivityFeedDB.GroupScope {
-		s.broadcast(websockets.BroadcastMessage{MasterID: query.MasterID, Scope: string(pogActivityFeedDB.GroupScope), Data: mustMarshal(userMsg)})
-		s.broadcast(websockets.BroadcastMessage{MasterID: query.MasterID, Scope: string(pogActivityFeedDB.GroupScope), Data: mustMarshal(aiMsg)})
+		s.broadcast(websockets.BroadcastMessage{
+			MasterID:      query.MasterID,
+			ExcludeUserID: userID, // Don't send the user's own prompt back to them
+			Scope:         string(pogActivityFeedDB.GroupScope),
+			Data:          mustMarshal(userMsg),
+		})
+		s.broadcast(websockets.BroadcastMessage{
+			MasterID: query.MasterID,
+			Scope:    string(pogActivityFeedDB.GroupScope),
+			Data:     mustMarshal(aiMsg),
+		})
 	}
 
 	return &AIResponseDTO{UserMessage: userMsg, AIMessage: aiMsg}, nil

@@ -1,6 +1,7 @@
 package websockets
 
 import (
+	"log"
 	"net/http"
 
 	"pog/internal"
@@ -24,10 +25,16 @@ func (h *WebsocketsHandler) HandleWebSocket(w http.ResponseWriter, r *http.Reque
 	masterID := r.PathValue("masterId")
 	userID := internal.MustUserID(r.Context())
 
+	log.Printf("[WS] Upgrade attempt: masterID=%s, userID=%s", masterID, userID)
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
+		log.Printf("[WS] Upgrade failed: %v", err)
 		return
 	}
+
+	log.Printf("[WS] Upgrade successful: masterID=%s, userID=%s", masterID, userID)
+
 
 	client := &Client{
 		UserID:   userID,

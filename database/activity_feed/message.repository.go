@@ -60,7 +60,7 @@ func (r *MessageRepository) FetchHistory(ctx context.Context, masterID primitive
 		return nil, 0, err
 	}
 
-	opts := options.Find().SetSort(bson.M{"created_at": -1}) // Latest first
+	opts := options.Find().SetSort(bson.M{"created_at": 1}) // Oldest first
 	if limit > 0 {
 		opts.SetLimit(int64(limit))
 		opts.SetSkip(int64((page - 1) * limit))

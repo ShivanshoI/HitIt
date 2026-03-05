@@ -24,22 +24,28 @@ func (w *statusWriter) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
-// Auth verifies the JWT token in the Authorization header.
+// Auth verifies the JWT token in the Authorization header or token query parameter.
 func Auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokenString := ""
 		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			internal.ErrorResponse(w, internal.NewUnauthorized("Authorization header is missing"))
+		if authHeader != "" {
+			parts := strings.Split(authHeader, " ")
+			if len(parts) == 2 && parts[0] == "Bearer" {
+				tokenString = parts[1]
+			}
+		}
+
+		// If no header, try query parameter (common for WebSockets)
+		if tokenString == "" {
+			tokenString = r.URL.Query().Get("token")
+		}
+
+		if tokenString == "" {
+			internal.ErrorResponse(w, internal.NewUnauthorized("Authentication token is missing"))
 			return
 		}
 
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			internal.ErrorResponse(w, internal.NewUnauthorized("Invalid Authorization header format"))
-			return
-		}
-
-		tokenString := parts[1]
 		userID, err := internal.ValidateToken(tokenString)
 		if err != nil {
 			internal.ErrorResponse(w, internal.NewUnauthorized("Invalid or expired token"))

@@ -7,6 +7,7 @@ import (
 
 	pogActivityFeedDB "pog/database/activity_feed"
 	"pog/internal"
+	"pog/service/websockets"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -14,11 +15,11 @@ import (
 // ActivityFeedService owns all business logic for the activity feed.
 type ActivityFeedService struct {
 	repo *pogActivityFeedDB.MessageRepository
-	hub  *Hub
+	hub  *websockets.Hub
 }
 
 // NewActivityFeedService constructs a service with the given repository and hub.
-func NewActivityFeedService(repo *pogActivityFeedDB.MessageRepository, hub *Hub) *ActivityFeedService {
+func NewActivityFeedService(repo *pogActivityFeedDB.MessageRepository, hub *websockets.Hub) *ActivityFeedService {
 	return &ActivityFeedService{repo: repo, hub: hub}
 }
 
@@ -29,11 +30,11 @@ func (s *ActivityFeedService) SendMessage(ctx context.Context, item *pogActivity
 		return nil, internal.NewInternalError("failed to save message")
 	}
 
-	s.broadcast(broadcastMessage{
-		masterID: created.MasterID.Hex(),
-		userID:   created.UserID.Hex(),
-		scope:    created.Scope,
-		data:     mustMarshal(created),
+	s.broadcast(websockets.BroadcastMessage{
+		MasterID: created.MasterID.Hex(),
+		UserID:   created.UserID.Hex(),
+		Scope:    string(created.Scope),
+		Data:     mustMarshal(created),
 	})
 
 	return created, nil
@@ -75,10 +76,10 @@ func (s *ActivityFeedService) ResolveIssue(ctx context.Context, issueID, masterI
 		return internal.NewInternalError("failed to resolve issue")
 	}
 
-	s.broadcast(broadcastMessage{
-		masterID: masterID,
-		scope:    pogActivityFeedDB.GroupScope,
-		data: mustMarshal(map[string]interface{}{
+	s.broadcast(websockets.BroadcastMessage{
+		MasterID: masterID,
+		Scope:    string(pogActivityFeedDB.GroupScope),
+		Data: mustMarshal(map[string]interface{}{
 			"type":        "update",
 			"action":      "resolve",
 			"issue_id":    issueID,
@@ -132,8 +133,8 @@ func (s *ActivityFeedService) AIQuery(ctx context.Context, query *AIQueryDTO, us
 	// 4. Broadcast both messages for group-scoped feeds so other connected
 	//    clients see the exchange in real time.
 	if query.Scope == pogActivityFeedDB.GroupScope {
-		s.broadcast(broadcastMessage{masterID: query.MasterID, scope: pogActivityFeedDB.GroupScope, data: mustMarshal(userMsg)})
-		s.broadcast(broadcastMessage{masterID: query.MasterID, scope: pogActivityFeedDB.GroupScope, data: mustMarshal(aiMsg)})
+		s.broadcast(websockets.BroadcastMessage{MasterID: query.MasterID, Scope: string(pogActivityFeedDB.GroupScope), Data: mustMarshal(userMsg)})
+		s.broadcast(websockets.BroadcastMessage{MasterID: query.MasterID, Scope: string(pogActivityFeedDB.GroupScope), Data: mustMarshal(aiMsg)})
 	}
 
 	return &AIResponseDTO{UserMessage: userMsg, AIMessage: aiMsg}, nil
@@ -142,8 +143,8 @@ func (s *ActivityFeedService) AIQuery(ctx context.Context, query *AIQueryDTO, us
 // ---------- private helpers ----------
 
 // broadcast is a thin wrapper that makes call-sites more readable.
-func (s *ActivityFeedService) broadcast(msg broadcastMessage) {
-	s.hub.broadcast <- msg
+func (s *ActivityFeedService) broadcast(msg websockets.BroadcastMessage) {
+	s.hub.Broadcast <- msg
 }
 
 // mustMarshal serialises v to JSON, panicking only on programmer error

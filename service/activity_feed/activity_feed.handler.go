@@ -30,7 +30,6 @@ func (h *ActivityFeedHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST "+internal.APIPrefix+"/feed/{masterId}/send", auth(http.HandlerFunc(h.SendMessage)))
 	mux.Handle("PATCH "+internal.APIPrefix+"/feed/issue/{id}/resolve", auth(http.HandlerFunc(h.ResolveIssue)))
 	mux.Handle("POST "+internal.APIPrefix+"/feed/ai/query", auth(http.HandlerFunc(h.AIQuery)))
-	mux.Handle("GET "+internal.APIPrefix+"/feed/ws/{masterId}", auth(http.HandlerFunc(h.HandleWebSocket)))
 }
 
 // FetchHistory godoc
@@ -148,39 +147,6 @@ func (h *ActivityFeedHandler) AIQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondOK(w, response)
-}
-
-// HandleWebSocket upgrades the connection and registers the client with the hub.
-// GET /feed/ws/{masterId}
-func (h *ActivityFeedHandler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
-	masterID := r.PathValue("masterId")
-	userID := internal.MustUserID(r.Context())
-
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		// upgrader already writes the HTTP error; nothing more to do.
-		return
-	}
-
-	client := &Client{
-		UserID:   userID,
-		MasterID: masterID,
-		Conn:     conn,
-		Send:     make(chan []byte, 256),
-	}
-
-	h.service.hub.register <- client
-	go client.writePump()
-
-	defer func() { h.service.hub.unregister <- client }()
-
-	// Drain incoming frames; we don't process client→server messages yet,
-	// but we must read to honour the WebSocket protocol (pings, close frames).
-	for {
-		if _, _, err := conn.ReadMessage(); err != nil {
-			break
-		}
-	}
 }
 
 // ---------- helpers ----------

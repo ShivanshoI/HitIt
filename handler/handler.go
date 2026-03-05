@@ -10,6 +10,7 @@ import (
 	pogExecutionSVC "pog/service/execution"
 	pogRequestsSVC "pog/service/requests"
 	pogUsersSVC "pog/service/users"
+	pogWebsocketsSVC "pog/service/websockets"
 
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -34,8 +35,11 @@ func CompileHandlers(db *mongo.Database) http.Handler {
 	// Collaborators Module Setup
 	pogCollaboratorsSVC.InitModule(db, mux)
 
+	// Websockets Module Setup
+	wsHub := pogWebsocketsSVC.InitModule(mux)
+
 	// Activity Feed Module Setup
-	pogActivityFeedSVC.InitModule(db, mux)
+	pogActivityFeedSVC.InitModule(db, mux, wsHub)
 
 	// Execution Module Setup
 	pogExecutionSVC.InitModule(db, mux)

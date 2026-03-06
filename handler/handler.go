@@ -9,6 +9,7 @@ import (
 	"pog/service/collections"
 	pogExecutionSVC "pog/service/execution"
 	pogRequestsSVC "pog/service/requests"
+	pogTeamsSVC "pog/service/teams"
 	pogUsersSVC "pog/service/users"
 	pogWebsocketsSVC "pog/service/websockets"
 
@@ -23,14 +24,17 @@ func CompileHandlers(db *mongo.Database) http.Handler {
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 
+	// Teams Module Setup (must be first — returns authTeam middleware)
+	authTeam := pogTeamsSVC.InitModule(db, mux)
+
 	// Users Module Setup
 	pogUsersSVC.InitModule(db, mux)
 
-	// Collections Module Setup
-	collections.InitModule(db, mux)
+	// Collections Module Setup (team-scoped)
+	collections.InitModule(db, mux, authTeam)
 
-	// Requests Module Setup
-	pogRequestsSVC.InitModule(db, mux)
+	// Requests Module Setup (team-scoped)
+	pogRequestsSVC.InitModule(db, mux, authTeam)
 
 	// Collaborators Module Setup
 	pogCollaboratorsSVC.InitModule(db, mux)
@@ -41,8 +45,8 @@ func CompileHandlers(db *mongo.Database) http.Handler {
 	// Activity Feed Module Setup
 	pogActivityFeedSVC.InitModule(db, mux, wsHub)
 
-	// Execution Module Setup
-	pogExecutionSVC.InitModule(db, mux)
+	// Execution Module Setup (team-scoped)
+	pogExecutionSVC.InitModule(db, mux, authTeam)
 
 	return mux
 }

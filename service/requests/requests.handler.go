@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/http"
 	"pog/internal"
-	"pog/middleware"
 )
 
 type RequestHandler struct {
@@ -18,12 +17,12 @@ func NewRequestHandler(service *RequestService) *RequestHandler {
 	}
 }
 
-func (h *RequestHandler) RegisterRoutes(mux *http.ServeMux) {
-	mux.Handle("POST "+internal.APIPrefix+"/requests", middleware.Auth(http.HandlerFunc(h.Create)))
-	mux.Handle("GET "+internal.APIPrefix+"/requests/collections/{collectionID}", middleware.Auth(http.HandlerFunc(h.ListByCollection)))
-	mux.Handle("GET "+internal.APIPrefix+"/requests/{requestID}", middleware.Auth(http.HandlerFunc(h.GetByID)))
-	mux.Handle("PUT "+internal.APIPrefix+"/requests/{requestID}", middleware.Auth(http.HandlerFunc(h.Update)))
-	mux.Handle("PATCH "+internal.APIPrefix+"/requests/{requestID}/modify/", middleware.Auth(http.HandlerFunc(h.UpdateField)))
+func (h *RequestHandler) RegisterRoutes(mux *http.ServeMux, authTeam func(http.Handler) http.Handler) {
+	mux.Handle("POST "+internal.APIPrefix+"/requests", authTeam(http.HandlerFunc(h.Create)))
+	mux.Handle("GET "+internal.APIPrefix+"/requests/collections/{collectionID}", authTeam(http.HandlerFunc(h.ListByCollection)))
+	mux.Handle("GET "+internal.APIPrefix+"/requests/{requestID}", authTeam(http.HandlerFunc(h.GetByID)))
+	mux.Handle("PUT "+internal.APIPrefix+"/requests/{requestID}", authTeam(http.HandlerFunc(h.Update)))
+	mux.Handle("PATCH "+internal.APIPrefix+"/requests/{requestID}/modify/", authTeam(http.HandlerFunc(h.UpdateField)))
 }
 
 func (h *RequestHandler) Create(w http.ResponseWriter, r *http.Request) {

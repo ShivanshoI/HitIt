@@ -10,7 +10,7 @@ import (
 )
 
 // InitModule acts as a bootstrap for the 'requests' domain.
-func InitModule(db *mongo.Database, mux *http.ServeMux) {
+func InitModule(db *mongo.Database, mux *http.ServeMux, authTeam func(http.Handler) http.Handler) {
 	// Initialize Dependencies
 	repo := pogRequestsDB.NewRequestRepository(db)
 	collectionRepo := pogCollectionsDB.NewCollectionRepository(db)
@@ -18,5 +18,5 @@ func InitModule(db *mongo.Database, mux *http.ServeMux) {
 	handler := NewRequestHandler(service)
 
 	// Register Endpoints
-	handler.RegisterRoutes(mux)
+	handler.RegisterRoutes(mux, authTeam)
 }

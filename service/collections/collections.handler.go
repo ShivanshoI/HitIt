@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/http"
 	"pog/internal"
-	"pog/middleware"
 	"strconv"
 )
 
@@ -19,10 +18,10 @@ func NewCollectionHandler(service *CollectionService) *CollectionHandler {
 	}
 }
 
-func (h *CollectionHandler) RegisterRoutes(mux *http.ServeMux) {
-	mux.Handle("POST "+internal.APIPrefix+"/collections", middleware.Auth(http.HandlerFunc(h.Create)))
-	mux.Handle("GET "+internal.APIPrefix+"/collections", middleware.Auth(http.HandlerFunc(h.List)))
-	mux.Handle("PATCH "+internal.APIPrefix+"/collections/{collectionID}/mod/", middleware.Auth(http.HandlerFunc(h.UpdateField)))
+func (h *CollectionHandler) RegisterRoutes(mux *http.ServeMux, authTeam func(http.Handler) http.Handler) {
+	mux.Handle("POST "+internal.APIPrefix+"/collections", authTeam(http.HandlerFunc(h.Create)))
+	mux.Handle("GET "+internal.APIPrefix+"/collections", authTeam(http.HandlerFunc(h.List)))
+	mux.Handle("PATCH "+internal.APIPrefix+"/collections/{collectionID}/mod/", authTeam(http.HandlerFunc(h.UpdateField)))
 }
 
 func (h *CollectionHandler) Create(w http.ResponseWriter, r *http.Request) {

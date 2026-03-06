@@ -3,7 +3,6 @@ package execution
 import (
 	"net/http"
 	"pog/internal"
-	"pog/middleware"
 	"strconv"
 )
 
@@ -17,10 +16,10 @@ func NewExecutionHandler(service *ExecutionService) *ExecutionHandler {
 	}
 }
 
-func (h *ExecutionHandler) RegisterRoutes(mux *http.ServeMux) {
-	mux.Handle("POST "+internal.APIPrefix+"/requests/{requestID}/hit", middleware.Auth(http.HandlerFunc(h.Hit)))
-	mux.Handle("GET "+internal.APIPrefix+"/history", middleware.Auth(http.HandlerFunc(h.GetHistory)))
-	mux.Handle("DELETE "+internal.APIPrefix+"/history", middleware.Auth(http.HandlerFunc(h.ClearHistory)))
+func (h *ExecutionHandler) RegisterRoutes(mux *http.ServeMux, authTeam func(http.Handler) http.Handler) {
+	mux.Handle("POST "+internal.APIPrefix+"/requests/{requestID}/hit", authTeam(http.HandlerFunc(h.Hit)))
+	mux.Handle("GET "+internal.APIPrefix+"/history", authTeam(http.HandlerFunc(h.GetHistory)))
+	mux.Handle("DELETE "+internal.APIPrefix+"/history", authTeam(http.HandlerFunc(h.ClearHistory)))
 }
 
 func (h *ExecutionHandler) Hit(w http.ResponseWriter, r *http.Request) {

@@ -5,6 +5,8 @@ import (
 	"log"
 	"time"
 
+	"pog/internal"
+
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -21,6 +23,23 @@ func NewHistoryRepository(db *mongo.Database) *HistoryRepository {
 	return &HistoryRepository{
 		collection: db.Collection(CollectionName),
 	}
+}
+
+// applyTeamScope injects the X-Team-Id into the MongoDB filter.
+func applyTeamScope(ctx context.Context, filter bson.M) bson.M {
+	teamID, ok := ctx.Value(internal.TeamIDKey).(string)
+	if ok && teamID != "" {
+		objID, err := primitive.ObjectIDFromHex(teamID)
+		if err == nil {
+			filter["team_id"] = objID
+			// In team scope, we show all history for the team
+			delete(filter, "user_id") 
+		}
+	} else {
+		// Personal scope: ensure team_id does not exist
+		filter["team_id"] = nil
+	}
+	return filter
 }
 
 func (r *HistoryRepository) Create(ctx context.Context, history *RequestHistory) (*RequestHistory, error) {
@@ -44,7 +63,7 @@ func (r *HistoryRepository) ListByUserID(ctx context.Context, userID string, pag
 		return nil, 0, err
 	}
 
-	filter := bson.M{"user_id": objUserID}
+	filter := applyTeamScope(ctx, bson.M{"user_id": objUserID})
 	
 	total, err := r.collection.CountDocuments(ctx, filter)
 	if err != nil {

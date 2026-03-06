@@ -145,6 +145,13 @@ func (s *ExecutionService) ExecuteRequest(ctx context.Context, requestID string,
 			// ExecutedAt is set by repo
 		}
 
+		// Also extract from the original request context because we're using a background context
+		if teamID, ok := ctx.Value(internal.TeamIDKey).(string); ok && teamID != "" {
+			if objTeamID, err := primitive.ObjectIDFromHex(teamID); err == nil {
+				historyEntry.TeamID = &objTeamID
+			}
+		}
+
 		_, hErr := s.historyRepo.Create(bgCtx, historyEntry)
 		if hErr != nil {
 			log.Printf("[SERVICE] Failed to save execution history: %v", hErr)

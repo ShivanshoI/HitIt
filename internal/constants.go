@@ -9,4 +9,5 @@ type ContextKey string
 
 const (
 	UserIDKey ContextKey = "userId"
+	TeamIDKey ContextKey = "teamId"
 )

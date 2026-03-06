@@ -33,3 +33,11 @@ func NewUnauthorized(msg string) *AppError {
 	return &AppError{StatusCode: http.StatusUnauthorized, Message: msg}
 }
 
+func NewForbidden(msg string) *AppError {
+	return &AppError{StatusCode: http.StatusForbidden, Message: msg}
+}
+
+func NewConflict(msg string) *AppError {
+	return &AppError{StatusCode: http.StatusConflict, Message: msg}
+}
+

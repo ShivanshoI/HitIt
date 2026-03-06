@@ -66,6 +66,12 @@ func (s *RequestService) Create(ctx context.Context, payload *CreateRequestDTO, 
 		WritePermission: true,
 	}
 
+	if teamID, ok := ctx.Value(internal.TeamIDKey).(string); ok && teamID != "" {
+		if objTeamID, err := primitive.ObjectIDFromHex(teamID); err == nil {
+			reqModel.TeamID = &objTeamID
+		}
+	}
+
 	req, err := s.repo.Create(ctx, reqModel)
 	if err != nil {
 		return nil, internal.NewInternalError("Failed to create request")

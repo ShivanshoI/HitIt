@@ -5,6 +5,8 @@ import (
 	"log"
 	"time"
 
+	"pog/internal"
+
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -21,6 +23,25 @@ func NewCollectionRepository(db *mongo.Database) *CollectionRepository {
 	return &CollectionRepository{
 		collection: db.Collection(CollectionName),
 	}
+}
+
+// applyTeamScope injects the X-Team-Id into the MongoDB filter.
+// - If inside a team, it ignores `user_id` and filters purely by `team_id`.
+// - If personal scope, it enforces that `team_id` is missing or null.
+func applyTeamScope(ctx context.Context, filter bson.M) bson.M {
+	teamID, ok := ctx.Value(internal.TeamIDKey).(string)
+	if ok && teamID != "" {
+		objID, err := primitive.ObjectIDFromHex(teamID)
+		if err == nil {
+			filter["team_id"] = objID
+			// In team scope, we show all collections for the team, regardless of who created them.
+			delete(filter, "user_id") 
+		}
+	} else {
+		// Personal scope: ensure team_id does not exist
+		filter["team_id"] = nil
+	}
+	return filter
 }
 
 // Create inserts a new collection into the database
@@ -43,12 +64,15 @@ func (r *CollectionRepository) Create(ctx context.Context, collection *Collectio
 	log.Printf("[REPO] Successfully inserted collection with ID: %s", collection.ID.Hex())
 	return collection, nil
 }
+
 func (r *CollectionRepository) FindAllByUserID(ctx context.Context, userID string) ([]Collection, error) {
 	objId, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
 		return nil, err
 	}
-	cursor, err := r.collection.Find(ctx, bson.M{"user_id": objId})
+	filter := applyTeamScope(ctx, bson.M{"user_id": objId})
+	
+	cursor, err := r.collection.Find(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +92,9 @@ func (r *CollectionRepository) FindAllByMasterID(ctx context.Context, masterID s
 		return nil, err
 	}
 
-	cursor, err := r.collection.Find(ctx, bson.M{"master_id": objID})
+	filter := applyTeamScope(ctx, bson.M{"master_id": objID})
+
+	cursor, err := r.collection.Find(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -88,8 +114,10 @@ func (r *CollectionRepository) GetByID(ctx context.Context, id string) (*Collect
 		return nil, err
 	}
 
+	filter := applyTeamScope(ctx, bson.M{"_id": objID})
+
 	var collection Collection
-	err = r.collection.FindOne(ctx, bson.M{"_id": objID}).Decode(&collection)
+	err = r.collection.FindOne(ctx, filter).Decode(&collection)
 	if err != nil {
 		return nil, err
 	}
@@ -102,8 +130,10 @@ func (r *CollectionRepository) GetByMasterID(ctx context.Context, id string) (*C
 		return nil, err
 	}
 
+	filter := applyTeamScope(ctx, bson.M{"master_id": objID})
+
 	var collection Collection
-	err = r.collection.FindOne(ctx, bson.M{"master_id": objID}).Decode(&collection)
+	err = r.collection.FindOne(ctx, filter).Decode(&collection)
 	if err != nil {
 		return nil, err
 	}
@@ -117,8 +147,10 @@ func (r *CollectionRepository) ListByUserID(ctx context.Context, userID string) 
 		return nil, err
 	}
 
+	filter := applyTeamScope(ctx, bson.M{"user_id": objUserID})
+
 	opts := options.Find().SetSort(bson.M{"updated_at": -1})
-	cursor, err := r.collection.Find(ctx, bson.M{"user_id": objUserID}, opts)
+	cursor, err := r.collection.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +170,7 @@ func (r *CollectionRepository) ListPaginatedByUserID(ctx context.Context, userID
 		return nil, 0, err
 	}
 
-	filter := bson.M{"user_id": objUserID}
+	filter := applyTeamScope(ctx, bson.M{"user_id": objUserID})
 
 	total, err := r.collection.CountDocuments(ctx, filter)
 	if err != nil {
@@ -171,12 +203,12 @@ func (r *CollectionRepository) ListPaginatedSharedByUserID(ctx context.Context, 
 	}
 
 	// Shared collections are those where user_id matches but _id != master_id
-	filter := bson.M{
+	filter := applyTeamScope(ctx, bson.M{
 		"user_id": objUserID,
 		"$expr": bson.M{
 			"$ne": bson.A{"$_id", "$master_id"},
 		},
-	}
+	})
 
 	total, err := r.collection.CountDocuments(ctx, filter)
 	if err != nil {
@@ -208,10 +240,10 @@ func (r *CollectionRepository) ListPaginatedFavByUserID(ctx context.Context, use
 		return nil, 0, err
 	}
 
-	filter := bson.M{
+	filter := applyTeamScope(ctx, bson.M{
 		"user_id":  objUserID,
 		"favorite": true,
-	}
+	})
 
 	total, err := r.collection.CountDocuments(ctx, filter)
 	if err != nil {

@@ -40,6 +40,12 @@ func (s *CollectionService) Create(ctx context.Context, payload *CreateCollectio
 		WritePermission: true,
 	}
 
+	if teamID, ok := ctx.Value(internal.TeamIDKey).(string); ok && teamID != "" {
+		if objTeamID, err := primitive.ObjectIDFromHex(teamID); err == nil {
+			collectionModel.TeamID = &objTeamID
+		}
+	}
+
 	collection, err := s.repo.Create(ctx, collectionModel)
 	if err != nil {
 		return nil, internal.NewInternalError("Failed to create collection")
@@ -123,6 +129,12 @@ func (s *CollectionService) ListAllCollection(ctx context.Context, userID string
 					newCol := collections.Collection{
 						UserID:        objUserID,
 						TotalRequests: 0,
+					}
+
+					if teamID, ok := ctx.Value(internal.TeamIDKey).(string); ok && teamID != "" {
+						if objTeamID, err := primitive.ObjectIDFromHex(teamID); err == nil {
+							newCol.TeamID = &objTeamID
+						}
 					}
 
 					if name, ok := item["name"].(string); ok {

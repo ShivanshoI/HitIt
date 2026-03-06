@@ -156,3 +156,14 @@ func (r *UserRepository) FindMultipleByIDs(ctx context.Context, ids []primitive.
 	}
 	return users, nil
 }
+
+// FindByEmail retrieves a user by their email address
+func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*User, error) {
+	var user User
+	err := r.collection.FindOne(ctx, bson.M{"email_address": email}).Decode(&user)
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+

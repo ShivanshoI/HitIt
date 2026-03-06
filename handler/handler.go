@@ -8,6 +8,8 @@ import (
 	pogCollaboratorsSVC "pog/service/collaborators"
 	"pog/service/collections"
 	pogExecutionSVC "pog/service/execution"
+	pogPlansSVC "pog/service/plans"
+	pogProfileSVC "pog/service/profile"
 	pogRequestsSVC "pog/service/requests"
 	pogTeamsSVC "pog/service/teams"
 	pogUsersSVC "pog/service/users"
@@ -30,6 +32,12 @@ func CompileHandlers(db *mongo.Database) http.Handler {
 	// Users Module Setup
 	pogUsersSVC.InitModule(db, mux)
 
+	// Profile Module Setup (stats, activity, update profile/password, sessions)
+	pogProfileSVC.InitModule(db, mux)
+
+	// Plans + Billing Module Setup (plans, subscription, payment method, invoices)
+	pogPlansSVC.InitModule(db, mux)
+
 	// Collections Module Setup (team-scoped)
 	collections.InitModule(db, mux, authTeam)
 
@@ -50,3 +58,4 @@ func CompileHandlers(db *mongo.Database) http.Handler {
 
 	return mux
 }
+

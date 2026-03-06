@@ -167,3 +167,61 @@ func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*User, 
 	return &user, nil
 }
 
+// UpdateProfile updates only the display fields (first/last name, email, theme) for a user.
+func (r *UserRepository) UpdateProfile(ctx context.Context, id, firstName, lastName, email, theme string) (*User, error) {
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return nil, err
+	}
+
+	setFields := bson.M{
+		"first_name": firstName,
+		"updated_at": time.Now(),
+	}
+	if email != "" {
+		setFields["email_address"] = email
+	}
+	if lastName != "" {
+		setFields["last_name"] = lastName
+	}
+	if theme != "" {
+		setFields["theme"] = theme
+	}
+
+	_, err = r.collection.UpdateOne(ctx, bson.M{"_id": objID}, bson.M{"$set": setFields})
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByID(ctx, id)
+}
+
+// UpdatePassword replaces only the password field for a user.
+func (r *UserRepository) UpdatePassword(ctx context.Context, id, newPassword string) error {
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return err
+	}
+	_, err = r.collection.UpdateOne(ctx, bson.M{"_id": objID}, bson.M{
+		"$set": bson.M{
+			"password":   newPassword,
+			"updated_at": time.Now(),
+		},
+	})
+	return err
+}
+
+// ExistsByEmailExcludingID checks if any other user already uses this email.
+func (r *UserRepository) ExistsByEmailExcludingID(ctx context.Context, email, excludeID string) (bool, error) {
+	objID, err := primitive.ObjectIDFromHex(excludeID)
+	if err != nil {
+		return false, err
+	}
+	count, err := r.collection.CountDocuments(ctx, bson.M{
+		"email_address": email,
+		"_id":           bson.M{"$ne": objID},
+	})
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}

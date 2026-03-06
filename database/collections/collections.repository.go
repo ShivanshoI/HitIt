@@ -313,3 +313,15 @@ func (r *CollectionRepository) UpdateFields(ctx context.Context, id string, upda
 	_, err = r.collection.UpdateOne(ctx, bson.M{"_id": objID}, update)
 	return err
 }
+
+// CountByUserID returns the total number of collections owned by this user
+// (personal scope — no team filter applied, intentionally scoped to user_id only).
+func (r *CollectionRepository) CountByUserID(ctx context.Context, userID string) (int64, error) {
+	objUserID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return 0, err
+	}
+	// We count all collections where user_id matches, regardless of team_id,
+	// so stats reflect the true total across both personal and team collections.
+	return r.collection.CountDocuments(ctx, bson.M{"user_id": objUserID})
+}

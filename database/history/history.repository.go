@@ -111,3 +111,12 @@ func (r *HistoryRepository) DeleteAllByUserID(ctx context.Context, userID string
 	_, err = r.collection.DeleteMany(ctx, bson.M{"user_id": objUserID})
 	return err
 }
+
+// CountAllByUserID returns the total number of requests ever executed by a user (all time, all teams).
+func (r *HistoryRepository) CountAllByUserID(ctx context.Context, userID string) (int64, error) {
+	objUserID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return 0, err
+	}
+	return r.collection.CountDocuments(ctx, bson.M{"user_id": objUserID})
+}

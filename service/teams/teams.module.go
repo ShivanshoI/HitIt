@@ -1,6 +1,8 @@
 package teams
 
 import (
+	"context"
+	"log"
 	"net/http"
 
 	teamFeedDB "pog/database/team_feed"
@@ -21,6 +23,21 @@ func InitModule(db *mongo.Database, mux *http.ServeMux) func(http.Handler) http.
 	inviteRepo := teamInvitesDB.NewTeamInvitesRepository(db)
 	feedRepo := teamFeedDB.NewTeamFeedRepository(db)
 	userRepo := usersDB.NewUserRepository(db)
+
+	// Ensure database indexes are created
+	ctx := context.Background()
+	if err := repo.EnsureIndexes(ctx); err != nil {
+		log.Printf("[WARN] Failed to create team indexes: %v", err)
+	}
+	if err := mappingRepo.EnsureIndexes(ctx); err != nil {
+		log.Printf("[WARN] Failed to create team mapping indexes: %v", err)
+	}
+	if err := inviteRepo.EnsureIndexes(ctx); err != nil {
+		log.Printf("[WARN] Failed to create team invite indexes: %v", err)
+	}
+	if err := feedRepo.EnsureIndexes(ctx); err != nil {
+		log.Printf("[WARN] Failed to create team feed indexes: %v", err)
+	}
 
 	// Service + Handler
 	service := NewTeamService(repo, mappingRepo, inviteRepo, feedRepo, userRepo)

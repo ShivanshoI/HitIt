@@ -1,10 +1,13 @@
 package collections
 
 import (
+	"context"
+	"log"
 	"net/http"
 
 	pogCollectionsDB "pog/database/collections"
 	pogConstantsDB "pog/database/constants"
+	pogRequestsDB "pog/database/requests"
 
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -14,8 +17,14 @@ func InitModule(db *mongo.Database, mux *http.ServeMux, authTeam func(http.Handl
 	// Initialize Dependencies
 	repo := pogCollectionsDB.NewCollectionRepository(db)
 	constRepo := pogConstantsDB.NewConstantRepository(db)
-	service := NewCollectionService(repo, constRepo)
+	requestsRepo := pogRequestsDB.NewRequestRepository(db)
+	service := NewCollectionService(repo, constRepo, requestsRepo)
 	handler := NewCollectionHandler(service)
+
+	// Ensure database indexes are created
+	if err := repo.EnsureIndexes(context.Background()); err != nil {
+		log.Printf("[WARN] Failed to create collection indexes: %v", err)
+	}
 
 	// Register Endpoints
 	handler.RegisterRoutes(mux, authTeam)

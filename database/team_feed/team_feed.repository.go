@@ -108,3 +108,15 @@ func (r *TeamFeedRepository) DeleteAllByTeamID(ctx context.Context, teamID strin
 	_, err = r.collection.DeleteMany(ctx, bson.M{"team_id": objTeamID})
 	return err
 }
+
+func (r *TeamFeedRepository) EnsureIndexes(ctx context.Context) error {
+	indexModel := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "team_id", Value: 1},
+			{Key: "created_at", Value: 1},
+		},
+	}
+	_, err := r.collection.Indexes().CreateOne(ctx, indexModel)
+	return err
+}
+

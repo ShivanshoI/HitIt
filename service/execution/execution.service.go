@@ -5,9 +5,11 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"pog/database/history"
 	"pog/database/requests"
 	"pog/internal"
+	"pog/internal/localbridge"
 	"strings"
 	"time"
 
@@ -15,15 +17,32 @@ import (
 )
 
 type ExecutionService struct {
-	requestRepo *requests.RequestRepository
-	historyRepo *history.HistoryRepository
+	requestRepo  *requests.RequestRepository
+	historyRepo  *history.HistoryRepository
+	bridge       *localbridge.Client // nil = bridge not configured
 }
 
-func NewExecutionService(requestRepo *requests.RequestRepository, historyRepo *history.HistoryRepository) *ExecutionService {
+func NewExecutionService(
+	requestRepo *requests.RequestRepository,
+	historyRepo *history.HistoryRepository,
+	bridge *localbridge.Client, // pass nil if BRIDGE_URL is not set
+) *ExecutionService {
 	return &ExecutionService{
 		requestRepo: requestRepo,
 		historyRepo: historyRepo,
+		bridge:      bridge,
 	}
+}
+
+// isLocalhost returns true if the URL targets localhost / 127.0.0.1.
+// These cannot be reached by the deployed backend directly — must go via bridge.
+func isLocalhost(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname() // strips port
+	return host == "localhost" || host == "127.0.0.1"
 }
 
 func (s *ExecutionService) ExecuteRequest(ctx context.Context, requestID string, userID string) (*ExecutionResult, error) {
@@ -37,99 +56,52 @@ func (s *ExecutionService) ExecuteRequest(ctx context.Context, requestID string,
 		return nil, internal.NewNotFound("Request not found")
 	}
 
-	// Basic variable replacement could happen here in the future
 	finalURL := reqModel.URL
 
-	// 1. Prepare the proxy HTTP request
-	var bodyReader io.Reader
-	if reqModel.Body != "" {
-		bodyReader = strings.NewReader(reqModel.Body)
-	}
-
-	proxyReq, err := http.NewRequestWithContext(ctx, reqModel.Method, finalURL, bodyReader)
-	if err != nil {
-		return nil, internal.NewInternalError("Failed to construct proxy request: " + err.Error())
-	}
-
-	// 2. Inject headers
+	// ── Build shared header map (used by both paths) ──────────────────────────
+	headers := map[string]string{}
 	hasUserAgent := false
+
 	for _, h := range reqModel.Headers {
 		if strings.ToLower(h.Key) == "host" {
-			proxyReq.Host = h.Value
-		} else {
-			proxyReq.Header.Set(h.Key, h.Value)
+			continue // handled separately in direct path
 		}
+		headers[h.Key] = h.Value
 		if strings.ToLower(h.Key) == "user-agent" {
 			hasUserAgent = true
 		}
 	}
 
-	// 2.1 Handle Auth field if present and Authorization header is not already set
-	if reqModel.Auth != "" && proxyReq.Header.Get("Authorization") == "" {
-		// Just a simple assumption that Auth might be the token or the full "Bearer <token>"
-		// You might need to adjust this depending on how the frontend saves the Auth type
-		proxyReq.Header.Set("Authorization", reqModel.Auth)
+	if reqModel.Auth != "" && headers["Authorization"] == "" {
+		headers["Authorization"] = reqModel.Auth
 	}
 
-	// 2.2 Default User-Agent to prevent WAFs from blocking Go-http-client
 	if !hasUserAgent {
-		proxyReq.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36")
+		headers["User-Agent"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
 	}
 
-	// Default Content-Type to application/json if not set, and body is provided
-	if proxyReq.Header.Get("Content-Type") == "" && reqModel.Body != "" {
-		proxyReq.Header.Set("Content-Type", "application/json")
+	if headers["Content-Type"] == "" && reqModel.Body != "" {
+		headers["Content-Type"] = "application/json"
 	}
 
-	// 3. Add Query Params (This will append to existing URL query string if any)
-	q := proxyReq.URL.Query()
-	for _, p := range reqModel.Params {
-		q.Add(p.Key, p.Value)
-	}
-	proxyReq.URL.RawQuery = q.Encode()
+	// ── Route decision ────────────────────────────────────────────────────────
+	//   localhost URL + bridge configured  →  bridge path
+	//   everything else                    →  direct http.Client path (unchanged)
 
-	// 4. Execute the Hit
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
+	var execResult *ExecutionResult
+	var bridgeRequestID string // stored in history alongside Mongo _id
 
-	start := time.Now()
-	resp, err := client.Do(proxyReq)
-	duration := time.Since(start)
+	if isLocalhost(finalURL) && s.bridge != nil {
+		execResult, bridgeRequestID, err = s.executeThroughBridge(ctx, reqModel, finalURL, headers)
+	} else {
+		execResult, err = s.executeDirect(ctx, reqModel, finalURL, headers)
+	}
 
 	if err != nil {
-		// If the HTTP call fails completely (e.g., DNS error, timeout)
-		return nil, internal.NewInternalError("Request execution failed: " + err.Error())
-	}
-	defer resp.Body.Close()
-
-	// 5. Read response
-	respBodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil && err != io.EOF {
-		return nil, internal.NewInternalError("Failed to read response body")
-	}
-	respSizeBytes := len(respBodyBytes)
-
-	// Build the response headers payload
-	respHeaders := []KeyValuePair{}
-	for k, v := range resp.Header {
-		val := ""
-		if len(v) > 0 {
-			val = strings.Join(v, ", ") // join multiple values e.g. multiple Set-Cookie
-		}
-		respHeaders = append(respHeaders, KeyValuePair{Key: k, Value: val})
+		return nil, err
 	}
 
-	execResult := &ExecutionResult{
-		StatusCode:        resp.StatusCode,
-		StatusText:        http.StatusText(resp.StatusCode),
-		ResponseTimeMs:    duration.Milliseconds(),
-		ResponseSizeBytes: respSizeBytes,
-		Headers:           respHeaders,
-		Body:              string(respBodyBytes),
-	}
-
-	// 6. Asynchronously save history logging
+	// ── Async history save (unchanged logic, bridge_request_id added) ─────────
 	go func() {
 		bgCtx := context.Background()
 		historyEntry := &history.RequestHistory{
@@ -142,10 +114,10 @@ func (s *ExecutionService) ExecuteRequest(ctx context.Context, requestID string,
 			StatusCode:        execResult.StatusCode,
 			ResponseTimeMs:    execResult.ResponseTimeMs,
 			ResponseSizeBytes: execResult.ResponseSizeBytes,
-			// ExecutedAt is set by repo
+			// BridgeRequestID stored if routed via extension (see history schema note below)
+			BridgeRequestID: bridgeRequestID,
 		}
 
-		// Also extract from the original request context because we're using a background context
 		if teamID, ok := ctx.Value(internal.TeamIDKey).(string); ok && teamID != "" {
 			if objTeamID, err := primitive.ObjectIDFromHex(teamID); err == nil {
 				historyEntry.TeamID = &objTeamID
@@ -161,7 +133,132 @@ func (s *ExecutionService) ExecuteRequest(ctx context.Context, requestID string,
 	return execResult, nil
 }
 
-// GetHistory fetches the recent execution logs for a user with pagination
+// executeThroughBridge routes the request via LocalBridge → extension → localhost.
+// Returns the execution result and the bridge's requestId (a UUID string).
+func (s *ExecutionService) executeThroughBridge(
+	ctx context.Context,
+	reqModel *requests.APIRequest, // matches database/requests/requests.schema.go
+	finalURL string,
+	headers map[string]string,
+) (*ExecutionResult, string, error) {
+
+	// Append query params to URL (same as direct path)
+	if len(reqModel.Params) > 0 {
+		u, err := url.Parse(finalURL)
+		if err != nil {
+			return nil, "", internal.NewInternalError("invalid URL: " + err.Error())
+		}
+		q := u.Query()
+		for _, p := range reqModel.Params {
+			q.Add(p.Key, p.Value)
+		}
+		u.RawQuery = q.Encode()
+		finalURL = u.String()
+	}
+
+	bridgeResp, err := s.bridge.Do(ctx, reqModel.Method, finalURL, headers, reqModel.Body)
+	if err != nil {
+		// Distinguish "no extension" from other errors so frontend can show a helpful message
+		if strings.Contains(err.Error(), "no extension connected") {
+			return nil, "", internal.NewBadRequest("LocalBridge extension is not connected. Open Chrome with the LocalBridge extension to hit localhost APIs.")
+		}
+		return nil, "", internal.NewInternalError("Bridge request failed: " + err.Error())
+	}
+
+	// Build response headers slice (same shape as direct path)
+	respHeaders := []KeyValuePair{}
+	for k, v := range bridgeResp.Headers {
+		respHeaders = append(respHeaders, KeyValuePair{Key: k, Value: v})
+	}
+
+	result := &ExecutionResult{
+		StatusCode:        bridgeResp.Status,
+		StatusText:        http.StatusText(bridgeResp.Status),
+		ResponseTimeMs:    bridgeResp.Duration,
+		ResponseSizeBytes: len(bridgeResp.BodyString()),
+		Headers:           respHeaders,
+		Body:              bridgeResp.BodyString(),
+	}
+
+	return result, bridgeResp.RequestID, nil
+}
+
+// executeDirect is your original http.Client logic, completely unchanged.
+func (s *ExecutionService) executeDirect(
+	ctx context.Context,
+	reqModel *requests.APIRequest,
+	finalURL string,
+	headers map[string]string,
+) (*ExecutionResult, error) {
+
+	var bodyReader io.Reader
+	if reqModel.Body != "" {
+		bodyReader = strings.NewReader(reqModel.Body)
+	}
+
+	proxyReq, err := http.NewRequestWithContext(ctx, reqModel.Method, finalURL, bodyReader)
+	if err != nil {
+		return nil, internal.NewInternalError("Failed to construct proxy request: " + err.Error())
+	}
+
+	for _, h := range reqModel.Headers {
+		if strings.ToLower(h.Key) == "host" {
+			proxyReq.Host = h.Value
+		} else {
+			proxyReq.Header.Set(h.Key, h.Value)
+		}
+	}
+
+	// Re-apply the auth / user-agent / content-type defaults using the shared map
+	// (already computed above, just set them on the request)
+	for k, v := range headers {
+		if proxyReq.Header.Get(k) == "" {
+			proxyReq.Header.Set(k, v)
+		}
+	}
+
+	q := proxyReq.URL.Query()
+	for _, p := range reqModel.Params {
+		q.Add(p.Key, p.Value)
+	}
+	proxyReq.URL.RawQuery = q.Encode()
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	start := time.Now()
+	resp, err := client.Do(proxyReq)
+	duration := time.Since(start)
+
+	if err != nil {
+		return nil, internal.NewInternalError("Request execution failed: " + err.Error())
+	}
+	defer resp.Body.Close()
+
+	respBodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil && err != io.EOF {
+		return nil, internal.NewInternalError("Failed to read response body")
+	}
+
+	respHeaders := []KeyValuePair{}
+	for k, v := range resp.Header {
+		val := ""
+		if len(v) > 0 {
+			val = strings.Join(v, ", ")
+		}
+		respHeaders = append(respHeaders, KeyValuePair{Key: k, Value: val})
+	}
+
+	return &ExecutionResult{
+		StatusCode:        resp.StatusCode,
+		StatusText:        http.StatusText(resp.StatusCode),
+		ResponseTimeMs:    duration.Milliseconds(),
+		ResponseSizeBytes: len(respBodyBytes),
+		Headers:           respHeaders,
+		Body:              string(respBodyBytes),
+	}, nil
+}
+
+// ── History + GetHistory + ClearHistory unchanged below ──────────────────────
+
 func (s *ExecutionService) GetHistory(ctx context.Context, userID string, page int, limit int) ([]history.RequestHistory, int64, error) {
 	if page < 1 {
 		page = 1
@@ -169,7 +266,6 @@ func (s *ExecutionService) GetHistory(ctx context.Context, userID string, page i
 	if limit < 1 {
 		limit = 50
 	}
-
 	historyLogs, total, err := s.historyRepo.ListByUserID(ctx, userID, page, limit)
 	if err != nil {
 		return nil, 0, internal.NewInternalError("Failed to fetch history")
@@ -177,7 +273,6 @@ func (s *ExecutionService) GetHistory(ctx context.Context, userID string, page i
 	return historyLogs, total, nil
 }
 
-// ClearHistory deletes all history for a user
 func (s *ExecutionService) ClearHistory(ctx context.Context, userID string) error {
 	err := s.historyRepo.DeleteAllByUserID(ctx, userID)
 	if err != nil {

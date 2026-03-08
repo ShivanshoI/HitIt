@@ -5,6 +5,7 @@ import (
 	"log"
 	"pog/database/collections"
 	"pog/database/constants"
+	pogRequestsDB "pog/database/requests"
 	"pog/internal"
 	"time"
 
@@ -12,14 +13,16 @@ import (
 )
 
 type CollectionService struct {
-	repo      *collections.CollectionRepository
-	constRepo *constants.ConstantRepository
+	repo         *collections.CollectionRepository
+	constRepo    *constants.ConstantRepository
+	requestsRepo *pogRequestsDB.RequestRepository
 }
 
-func NewCollectionService(repo *collections.CollectionRepository, constRepo *constants.ConstantRepository) *CollectionService {
+func NewCollectionService(repo *collections.CollectionRepository, constRepo *constants.ConstantRepository, requestsRepo *pogRequestsDB.RequestRepository) *CollectionService {
 	return &CollectionService{
-		repo:      repo,
-		constRepo: constRepo,
+		repo:         repo,
+		constRepo:    constRepo,
+		requestsRepo: requestsRepo,
 	}
 }
 
@@ -261,4 +264,28 @@ func (s *CollectionService) UpdateFields(ctx context.Context, collectionID strin
 		CreatedAt:      updatedCol.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:      updatedCol.UpdatedAt.Format(time.RFC3339),
 	}, nil
+}
+
+func (s *CollectionService) Delete(ctx context.Context, collectionID string, userID string) error {
+	col, err := s.repo.GetByID(ctx, collectionID)
+	if err != nil {
+		return internal.NewNotFound("Collection not found")
+	}
+
+	if col.UserID.Hex() != userID {
+		return internal.NewUnauthorized("Unauthorized to delete this collection")
+	}
+
+	// Delete all requests in this collection
+	err = s.requestsRepo.DeleteByCollectionID(ctx, collectionID)
+	if err != nil {
+		log.Printf("[SERVICE] Failed to delete requests for collection %s: %v", collectionID, err)
+	}
+
+	err = s.repo.Delete(ctx, collectionID)
+	if err != nil {
+		return internal.NewInternalError("Failed to delete collection")
+	}
+
+	return nil
 }

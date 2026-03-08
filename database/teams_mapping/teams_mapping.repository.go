@@ -7,6 +7,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 const CollectionName = "teams_mapping"
@@ -156,3 +157,21 @@ func (r *TeamsMappingRepository) DeleteAllByTeamID(ctx context.Context, teamID s
 	_, err = r.collection.DeleteMany(ctx, bson.M{"team_id": objTeamID})
 	return err
 }
+
+func (r *TeamsMappingRepository) EnsureIndexes(ctx context.Context) error {
+	indexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				{Key: "team_id", Value: 1},
+				{Key: "user_id", Value: 1},
+			},
+			Options: options.Index().SetUnique(true),
+		},
+		{
+			Keys: bson.D{{Key: "user_id", Value: 1}},
+		},
+	}
+	_, err := r.collection.Indexes().CreateMany(ctx, indexes)
+	return err
+}
+

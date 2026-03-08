@@ -12,6 +12,7 @@ type RequestHistory struct {
 	TeamID            *primitive.ObjectID `bson:"team_id,omitempty" json:"team_id,omitempty"`
 	RequestID         primitive.ObjectID  `bson:"request_id" json:"request_id"`
 	CollectionID      primitive.ObjectID  `bson:"collection_id" json:"collection_id"`
+	BridgeRequestID   string              `bson:"bridge_request_id,omitempty" json:"bridge_request_id,omitempty"`
 	Name              string              `bson:"name" json:"name"`
 	Method            string              `bson:"method" json:"method"`
 	URL               string              `bson:"url" json:"url"`

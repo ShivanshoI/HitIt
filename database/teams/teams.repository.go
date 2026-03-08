@@ -77,3 +77,11 @@ func (r *TeamsRepository) Delete(ctx context.Context, id string) error {
 	_, err = r.collection.DeleteOne(ctx, bson.M{"_id": objID})
 	return err
 }
+
+func (r *TeamsRepository) EnsureIndexes(ctx context.Context) error {
+	indexModel := mongo.IndexModel{
+		Keys: bson.D{{Key: "invite_token", Value: 1}},
+	}
+	_, err := r.collection.Indexes().CreateOne(ctx, indexModel)
+	return err
+}

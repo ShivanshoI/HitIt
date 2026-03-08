@@ -23,6 +23,7 @@ func (h *RequestHandler) RegisterRoutes(mux *http.ServeMux, authTeam func(http.H
 	mux.Handle("GET "+internal.APIPrefix+"/requests/{requestID}", authTeam(http.HandlerFunc(h.GetByID)))
 	mux.Handle("PUT "+internal.APIPrefix+"/requests/{requestID}", authTeam(http.HandlerFunc(h.Update)))
 	mux.Handle("PATCH "+internal.APIPrefix+"/requests/{requestID}/modify/", authTeam(http.HandlerFunc(h.UpdateField)))
+	mux.Handle("DELETE "+internal.APIPrefix+"/requests/{requestID}", authTeam(http.HandlerFunc(h.Delete)))
 }
 
 func (h *RequestHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -152,4 +153,30 @@ func (h *RequestHandler) UpdateField(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	internal.SuccessResponse(w, http.StatusOK, req)
+}
+
+func (h *RequestHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	requestID := r.PathValue("requestID")
+	if requestID == "" {
+		internal.ErrorResponse(w, internal.NewBadRequest("requestID is required"))
+		return
+	}
+
+	userID, ok := r.Context().Value(internal.UserIDKey).(string)
+	if !ok {
+		internal.ErrorResponse(w, internal.NewUnauthorized("unauthorized"))
+		return
+	}
+
+	err := h.service.Delete(r.Context(), requestID, userID)
+	if err != nil {
+		if appErr, ok := err.(*internal.AppError); ok {
+			internal.ErrorResponse(w, appErr)
+		} else {
+			internal.ErrorResponse(w, internal.NewInternalError("delete request failed"))
+		}
+		return
+	}
+
+	internal.SuccessResponse(w, http.StatusOK, map[string]string{"message": "Request deleted successfully"})
 }

@@ -1,6 +1,8 @@
 package profile
 
 import (
+	"context"
+	"log"
 	"net/http"
 
 	pogCollectionsDB "pog/database/collections"
@@ -19,6 +21,14 @@ func InitModule(db *mongo.Database, mux *http.ServeMux) {
 	historyRepo := pogHistoryDB.NewHistoryRepository(db)
 	teamsMappingRepo := pogTeamsMappingDB.NewTeamsMappingRepository(db)
 	activityRepo := pogUserActivityDB.NewActivityRepository(db)
+
+	ctx := context.Background()
+	if err := historyRepo.EnsureIndexes(ctx); err != nil {
+		log.Printf("[WARN] Failed to create history indexes: %v", err)
+	}
+	if err := activityRepo.EnsureIndexes(ctx); err != nil {
+		log.Printf("[WARN] Failed to create activity indexes: %v", err)
+	}
 
 	service := NewProfileService(usersRepo, collectionsRepo, historyRepo, teamsMappingRepo, activityRepo)
 	handler := NewProfileHandler(service)

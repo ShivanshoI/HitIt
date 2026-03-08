@@ -7,6 +7,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 const CollectionName = "team_invites"
@@ -37,5 +38,20 @@ func (r *TeamInvitesRepository) DeleteAllByTeamID(ctx context.Context, teamID st
 		return err
 	}
 	_, err = r.collection.DeleteMany(ctx, bson.M{"team_id": objTeamID})
+	return err
+}
+
+func (r *TeamInvitesRepository) EnsureIndexes(ctx context.Context) error {
+	indexes := []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "team_id", Value: 1}, {Key: "email", Value: 1}},
+			Options: options.Index().SetUnique(true),
+		},
+		{
+			Keys:    bson.D{{Key: "expires_at", Value: 1}},
+			Options: options.Index().SetExpireAfterSeconds(0),
+		},
+	}
+	_, err := r.collection.Indexes().CreateMany(ctx, indexes)
 	return err
 }

@@ -163,109 +163,86 @@ func (r *CollectionRepository) ListByUserID(ctx context.Context, userID string) 
 	return collections, nil
 }
 
-// ListPaginatedByUserID retrieves paginated collections for a specific user
-func (r *CollectionRepository) ListPaginatedByUserID(ctx context.Context, userID string, page int, limit int) ([]Collection, int64, error) {
-	objUserID, err := primitive.ObjectIDFromHex(userID)
-	if err != nil {
-		return nil, 0, err
+// listPaginated is the shared implementation — one DB round-trip for both data and count.
+func (r *CollectionRepository) listPaginated(
+	ctx context.Context,
+	filter bson.M,
+	page, limit int,
+) ([]Collection, int64, error) {
+	skip := int64((page - 1) * limit)
+
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: filter}},
+		{{Key: "$facet", Value: bson.M{
+			"data": bson.A{
+				bson.M{"$sort": bson.M{"updated_at": -1}},
+				bson.M{"$skip": skip},
+				bson.M{"$limit": int64(limit)},
+			},
+			"totalCount": bson.A{
+				bson.M{"$count": "count"},
+			},
+		}}},
 	}
 
-	filter := applyTeamScope(ctx, bson.M{"user_id": objUserID})
-
-	total, err := r.collection.CountDocuments(ctx, filter)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	findOptions := options.Find()
-	findOptions.SetSkip(int64((page - 1) * limit))
-	findOptions.SetLimit(int64(limit))
-	findOptions.SetSort(bson.M{"updated_at": -1})
-
-	cursor, err := r.collection.Find(ctx, filter, findOptions)
+	cursor, err := r.collection.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer cursor.Close(ctx)
 
-	var paginatedCollections []Collection
-	if err = cursor.All(ctx, &paginatedCollections); err != nil {
+	var results []struct {
+		Data       []Collection `bson:"data"`
+		TotalCount []struct {
+			Count int64 `bson:"count"`
+		} `bson:"totalCount"`
+	}
+	if err = cursor.All(ctx, &results); err != nil {
 		return nil, 0, err
 	}
-	return paginatedCollections, total, nil
+	if len(results) == 0 {
+		return []Collection{}, 0, nil
+	}
+
+	var total int64
+	if len(results[0].TotalCount) > 0 {
+		total = results[0].TotalCount[0].Count
+	}
+	return results[0].Data, total, nil
+}
+
+func (r *CollectionRepository) ListPaginatedByUserID(ctx context.Context, userID string, page, limit int) ([]Collection, int64, error) {
+	objUserID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return nil, 0, err
+	}
+	filter := applyTeamScope(ctx, bson.M{"user_id": objUserID})
+	return r.listPaginated(ctx, filter, page, limit)
 }
 
 // ListPaginatedSharedByUserID retrieves paginated shared collections for a specific user
-func (r *CollectionRepository) ListPaginatedSharedByUserID(ctx context.Context, userID string, page int, limit int) ([]Collection, int64, error) {
+func (r *CollectionRepository) ListPaginatedSharedByUserID(ctx context.Context, userID string, page, limit int) ([]Collection, int64, error) {
 	objUserID, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
 		return nil, 0, err
 	}
-
-	// Shared collections are those where user_id matches but _id != master_id
 	filter := applyTeamScope(ctx, bson.M{
 		"user_id": objUserID,
-		"$expr": bson.M{
-			"$ne": bson.A{"$_id", "$master_id"},
-		},
+		"$expr":   bson.M{"$ne": bson.A{"$_id", "$master_id"}},
 	})
-
-	total, err := r.collection.CountDocuments(ctx, filter)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	findOptions := options.Find()
-	findOptions.SetSkip(int64((page - 1) * limit))
-	findOptions.SetLimit(int64(limit))
-	findOptions.SetSort(bson.M{"updated_at": -1})
-
-	cursor, err := r.collection.Find(ctx, filter, findOptions)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer cursor.Close(ctx)
-
-	var paginatedCollections []Collection
-	if err = cursor.All(ctx, &paginatedCollections); err != nil {
-		return nil, 0, err
-	}
-	return paginatedCollections, total, nil
+	return r.listPaginated(ctx, filter, page, limit)
 }
 
-// ListPaginatedFavByUserID retrieves paginated favorite collections for a specific user
-func (r *CollectionRepository) ListPaginatedFavByUserID(ctx context.Context, userID string, page int, limit int) ([]Collection, int64, error) {
+func (r *CollectionRepository) ListPaginatedFavByUserID(ctx context.Context, userID string, page, limit int) ([]Collection, int64, error) {
 	objUserID, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
 		return nil, 0, err
 	}
-
 	filter := applyTeamScope(ctx, bson.M{
 		"user_id":  objUserID,
 		"favorite": true,
 	})
-
-	total, err := r.collection.CountDocuments(ctx, filter)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	findOptions := options.Find()
-	findOptions.SetSkip(int64((page - 1) * limit))
-	findOptions.SetLimit(int64(limit))
-	findOptions.SetSort(bson.M{"updated_at": -1})
-
-	cursor, err := r.collection.Find(ctx, filter, findOptions)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer cursor.Close(ctx)
-
-	var paginatedCollections []Collection
-	if err = cursor.All(ctx, &paginatedCollections); err != nil {
-		return nil, 0, err
-	}
-	return paginatedCollections, total, nil
+	return r.listPaginated(ctx, filter, page, limit)
 }
 
 // Update modifies an existing collection
@@ -324,4 +301,69 @@ func (r *CollectionRepository) CountByUserID(ctx context.Context, userID string)
 	// We count all collections where user_id matches, regardless of team_id,
 	// so stats reflect the true total across both personal and team collections.
 	return r.collection.CountDocuments(ctx, bson.M{"user_id": objUserID})
+}
+
+func (r *CollectionRepository) CreateMany(ctx context.Context, cols []*Collection) ([]Collection, error) {
+	now := time.Now()
+	docs := make([]interface{}, len(cols))
+	for i, c := range cols {
+		if c.ID.IsZero() {
+			c.ID = primitive.NewObjectID()
+		}
+		if c.MasterID.IsZero() {
+			c.MasterID = c.ID
+		}
+		c.CreatedAt = now
+		c.UpdatedAt = now
+		docs[i] = c
+	}
+
+	_, err := r.collection.InsertMany(ctx, docs)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]Collection, len(cols))
+	for i, c := range cols {
+		result[i] = *c
+	}
+	return result, nil
+}
+
+func (r *CollectionRepository) EnsureIndexes(ctx context.Context) error {
+	indexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				{Key: "user_id", Value: 1},
+				{Key: "team_id", Value: 1},
+				{Key: "updated_at", Value: -1},
+			},
+		},
+		{
+			Keys: bson.D{
+				{Key: "user_id", Value: 1},
+				{Key: "team_id", Value: 1},
+				{Key: "favorite", Value: 1},
+				{Key: "updated_at", Value: -1},
+			},
+		},
+		{
+			Keys: bson.D{
+				{Key: "team_id", Value: 1},
+				{Key: "updated_at", Value: -1},
+			},
+		},
+		{
+			Keys: bson.D{
+				{Key: "team_id", Value: 1},
+				{Key: "favorite", Value: 1},
+				{Key: "updated_at", Value: -1},
+			},
+		},
+		{
+			Keys: bson.D{{Key: "master_id", Value: 1}},
+		},
+	}
+	_, err := r.collection.Indexes().CreateMany(ctx, indexes)
+	return err
 }

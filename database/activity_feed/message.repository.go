@@ -93,3 +93,26 @@ func (r *MessageRepository) ResolveIssue(ctx context.Context, issueID primitive.
 	_, err := r.collection.UpdateOne(ctx, filter, update)
 	return err
 }
+
+func (r *MessageRepository) EnsureIndexes(ctx context.Context) error {
+	indexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				{Key: "master_id", Value: 1},
+				{Key: "scope", Value: 1},
+				{Key: "user_id", Value: 1},
+				{Key: "created_at", Value: 1},
+			},
+		},
+		{
+			Keys: bson.D{
+				{Key: "master_id", Value: 1},
+				{Key: "scope", Value: 1},
+				{Key: "created_at", Value: 1},
+			},
+		},
+	}
+	_, err := r.collection.Indexes().CreateMany(ctx, indexes)
+	return err
+}
+

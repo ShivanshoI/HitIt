@@ -251,3 +251,36 @@ func (s *RequestService) UpdateFields(ctx context.Context, requestID string, fie
 
 	return s.GetByID(ctx, requestID)
 }
+
+func (s *RequestService) Delete(ctx context.Context, requestID string, userID string) error {
+	req, err := s.repo.GetByID(ctx, requestID)
+	if err != nil {
+		return internal.NewNotFound("Request not found")
+	}
+
+	if req.UserID.Hex() != userID {
+		return internal.NewUnauthorized("Unauthorized to delete this request")
+	}
+
+	err = s.repo.Delete(ctx, requestID)
+	if err != nil {
+		return internal.NewInternalError("Failed to delete request")
+	}
+
+	// Decrementing the total requests in the background
+	go func(colID string) {
+		bgCtx := context.Background()
+
+		collectionDetails, err := s.collectionRepo.GetByID(bgCtx, colID)
+		if err != nil {
+			return
+		}
+
+		if collectionDetails.TotalRequests > 0 {
+			collectionDetails.TotalRequests--
+			_, _ = s.collectionRepo.Update(bgCtx, colID, collectionDetails)
+		}
+	}(req.CollectionID.Hex())
+
+	return nil
+}

@@ -66,3 +66,15 @@ func (r *ActivityRepository) ListByUserID(ctx context.Context, userID string, li
 	}
 	return events, nil
 }
+
+func (r *ActivityRepository) EnsureIndexes(ctx context.Context) error {
+	indexModel := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "user_id", Value: 1},
+			{Key: "created_at", Value: -1},
+		},
+	}
+	_, err := r.collection.Indexes().CreateOne(ctx, indexModel)
+	return err
+}
+

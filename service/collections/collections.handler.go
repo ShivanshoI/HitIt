@@ -22,6 +22,7 @@ func (h *CollectionHandler) RegisterRoutes(mux *http.ServeMux, authTeam func(htt
 	mux.Handle("POST "+internal.APIPrefix+"/collections", authTeam(http.HandlerFunc(h.Create)))
 	mux.Handle("GET "+internal.APIPrefix+"/collections", authTeam(http.HandlerFunc(h.List)))
 	mux.Handle("PATCH "+internal.APIPrefix+"/collections/{collectionID}/mod/", authTeam(http.HandlerFunc(h.UpdateField)))
+	mux.Handle("DELETE "+internal.APIPrefix+"/collections/{collectionID}", authTeam(http.HandlerFunc(h.Delete)))
 }
 
 func (h *CollectionHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -132,6 +133,32 @@ func (h *CollectionHandler) UpdateField(w http.ResponseWriter, r *http.Request) 
 	}
 	
 	internal.SuccessResponse(w, http.StatusOK, col)
+}
+
+func (h *CollectionHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	collectionID := r.PathValue("collectionID")
+	if collectionID == "" {
+		internal.ErrorResponse(w, internal.NewBadRequest("collectionID is required"))
+		return
+	}
+
+	userID, ok := r.Context().Value(internal.UserIDKey).(string)
+	if !ok {
+		internal.ErrorResponse(w, internal.NewUnauthorized("unauthorized"))
+		return
+	}
+
+	err := h.service.Delete(r.Context(), collectionID, userID)
+	if err != nil {
+		if appErr, ok := err.(*internal.AppError); ok {
+			internal.ErrorResponse(w, appErr)
+		} else {
+			internal.ErrorResponse(w, internal.NewInternalError("delete collection failed"))
+		}
+		return
+	}
+
+	internal.SuccessResponse(w, http.StatusOK, map[string]string{"message": "Collection deleted successfully"})
 }
 
 

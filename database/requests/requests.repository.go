@@ -205,3 +205,13 @@ func (r *RequestRepository) Delete(ctx context.Context, id string) error {
 	_, err = r.collection.DeleteOne(ctx, bson.M{"_id": objID})
 	return err
 }
+// DeleteByCollectionID removes all requests associated with a collection
+func (r *RequestRepository) DeleteByCollectionID(ctx context.Context, collectionID string) error {
+	objCollectionID, err := primitive.ObjectIDFromHex(collectionID)
+	if err != nil {
+		return err
+	}
+
+	_, err = r.collection.DeleteMany(ctx, bson.M{"collection_id": objCollectionID})
+	return err
+}

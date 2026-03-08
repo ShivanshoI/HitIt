@@ -1,6 +1,8 @@
 package users
 
 import (
+	"context"
+	"log"
 	"net/http"
 
 	pogUsersDB "pog/database/users"
@@ -15,6 +17,11 @@ func InitModule(db *mongo.Database, mux *http.ServeMux) {
 	repo := pogUsersDB.NewUserRepository(db)
 	service := NewUserService(repo)
 	handler := NewUserHandler(service)
+
+	// Ensure database indexes are created
+	if err := repo.EnsureIndexes(context.Background()); err != nil {
+		log.Printf("[WARN] Failed to create user indexes: %v", err)
+	}
 
 	// Register Endpoints
 	handler.RegisterRoutes(mux)

@@ -8,6 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 const CollectionName = "users"
@@ -224,4 +225,18 @@ func (r *UserRepository) ExistsByEmailExcludingID(ctx context.Context, email, ex
 		return false, err
 	}
 	return count > 0, nil
+}
+
+func (r *UserRepository) EnsureIndexes(ctx context.Context) error {
+	indexes := []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "email_address", Value: 1}},
+			Options: options.Index().SetUnique(true),
+		},
+		{
+			Keys: bson.D{{Key: "phone_number", Value: 1}},
+		},
+	}
+	_, err := r.collection.Indexes().CreateMany(ctx, indexes)
+	return err
 }

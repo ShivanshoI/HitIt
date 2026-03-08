@@ -120,3 +120,24 @@ func (r *HistoryRepository) CountAllByUserID(ctx context.Context, userID string)
 	}
 	return r.collection.CountDocuments(ctx, bson.M{"user_id": objUserID})
 }
+
+func (r *HistoryRepository) EnsureIndexes(ctx context.Context) error {
+	indexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				{Key: "user_id", Value: 1},
+				{Key: "team_id", Value: 1},
+				{Key: "executed_at", Value: -1},
+			},
+		},
+		{
+			Keys: bson.D{
+				{Key: "team_id", Value: 1},
+				{Key: "executed_at", Value: -1},
+			},
+		},
+	}
+	_, err := r.collection.Indexes().CreateMany(ctx, indexes)
+	return err
+}
+

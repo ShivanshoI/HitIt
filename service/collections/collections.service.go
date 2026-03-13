@@ -7,6 +7,7 @@ import (
 	"pog/database/constants"
 	pogRequestsDB "pog/database/requests"
 	"pog/internal"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -16,6 +17,7 @@ type CollectionService struct {
 	repo         *collections.CollectionRepository
 	constRepo    *constants.ConstantRepository
 	requestsRepo *pogRequestsDB.RequestRepository
+	userLocks    sync.Map
 }
 
 func NewCollectionService(repo *collections.CollectionRepository, constRepo *constants.ConstantRepository, requestsRepo *pogRequestsDB.RequestRepository) *CollectionService {
@@ -124,52 +126,15 @@ func (s *CollectionService) ListAllCollection(ctx context.Context, userID string
 	}
 
 	if (filter == "" || filter == "all") && len(collectionsList) == 0 {
-		objUserID, err := primitive.ObjectIDFromHex(userID)
-		if err == nil {
-			constItems, err := s.constRepo.ListLatestByTypeRaw(ctx, "collection", 5)
-			if err == nil {
-				for _, item := range constItems {
-					newCol := collections.Collection{
-						UserID:        objUserID,
-						TotalRequests: 0,
-					}
-
-					if teamID, ok := ctx.Value(internal.TeamIDKey).(string); ok && teamID != "" {
-						if objTeamID, err := primitive.ObjectIDFromHex(teamID); err == nil {
-							newCol.TeamID = &objTeamID
-						}
-					}
-
-					if name, ok := item["name"].(string); ok {
-						newCol.Name = name
-					}
-					if method, ok := item["default_method"].(string); ok {
-						newCol.Default_Method = method
-					}
-					if color, ok := item["accent_color"].(string); ok {
-						newCol.Accent_Color = color
-					}
-					if pattern, ok := item["pattern"].(string); ok {
-						newCol.Pattern = pattern
-					}
-					// Handle tags slice carefully
-					if tagsRaw, ok := item["tags"].(primitive.A); ok {
-						var tags []string
-						for _, t := range tagsRaw {
-							if ts, ok := t.(string); ok {
-								tags = append(tags, ts)
-							}
-						}
-						newCol.Tags = &tags
-					}
-
-					createdCol, err := s.repo.Create(ctx, &newCol)
-					if err == nil {
-						collectionsList = append(collectionsList, *createdCol)
-						total++
-					}
-				}
-			}
+		s.CreateDefaultCollections(ctx, userID)
+		// Re-fetch after creation to get the fresh list with IDs
+		switch filter {
+		case "share":
+			collectionsList, total, err = s.repo.ListPaginatedSharedByUserID(ctx, userID, page, limit)
+		case "fav":
+			collectionsList, total, err = s.repo.ListPaginatedFavByUserID(ctx, userID, page, limit)
+		default:
+			collectionsList, total, err = s.repo.ListPaginatedByUserID(ctx, userID, page, limit)
 		}
 	}
 
@@ -264,6 +229,69 @@ func (s *CollectionService) UpdateFields(ctx context.Context, collectionID strin
 		CreatedAt:      updatedCol.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:      updatedCol.UpdatedAt.Format(time.RFC3339),
 	}, nil
+}
+
+func (s *CollectionService) CreateDefaultCollections(ctx context.Context, userID string) error {
+	// Acquire per-user lock to prevent race conditions when creating default collections
+	lockObj, _ := s.userLocks.LoadOrStore(userID, &sync.Mutex{})
+	mu := lockObj.(*sync.Mutex)
+	mu.Lock()
+	defer mu.Unlock()
+	// Optionally, we could delete the lock from sync.Map, but it's fine to leave it for the lifetime of the process.
+
+	objUserID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return err
+	}
+
+	// Check if already has collections to avoid duplicates (double check for race)
+	existing, err := s.repo.ListByUserID(ctx, userID)
+	if err == nil && len(existing) > 0 {
+		return nil
+	}
+
+	constItems, err := s.constRepo.ListLatestByTypeRaw(ctx, "collection", 5)
+	if err != nil {
+		return err
+	}
+
+	for _, item := range constItems {
+		newCol := collections.Collection{
+			UserID:        objUserID,
+			TotalRequests: 0,
+		}
+
+		if teamID, ok := ctx.Value(internal.TeamIDKey).(string); ok && teamID != "" {
+			if objTeamID, err := primitive.ObjectIDFromHex(teamID); err == nil {
+				newCol.TeamID = &objTeamID
+			}
+		}
+
+		if name, ok := item["name"].(string); ok {
+			newCol.Name = name
+		}
+		if method, ok := item["default_method"].(string); ok {
+			newCol.Default_Method = method
+		}
+		if color, ok := item["accent_color"].(string); ok {
+			newCol.Accent_Color = color
+		}
+		if pattern, ok := item["pattern"].(string); ok {
+			newCol.Pattern = pattern
+		}
+		if tagsRaw, ok := item["tags"].(primitive.A); ok {
+			var tags []string
+			for _, t := range tagsRaw {
+				if ts, ok := t.(string); ok {
+					tags = append(tags, ts)
+				}
+			}
+			newCol.Tags = &tags
+		}
+
+		s.repo.Create(ctx, &newCol)
+	}
+	return nil
 }
 
 func (s *CollectionService) Delete(ctx context.Context, collectionID string, userID string) error {

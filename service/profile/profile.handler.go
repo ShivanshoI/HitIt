@@ -2,6 +2,7 @@ package profile
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -137,7 +138,8 @@ func (h *ProfileHandler) UpdatePassword(w http.ResponseWriter, r *http.Request) 
 
 	var req UpdatePasswordRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		internal.ErrorResponse(w, internal.NewBadRequest("invalid payload"))
+		log.Printf("[ERROR] Failed to decode password update payload: %v", err)
+		internal.ErrorResponse(w, internal.NewBadRequest("invalid JSON payload: check field names and types"))
 		return
 	}
 

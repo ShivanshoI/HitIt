@@ -2,6 +2,7 @@ package profile
 
 import (
 	"context"
+	"log"
 	"strings"
 
 	pogCollectionsDB "pog/database/collections"
@@ -149,9 +150,11 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID string, req U
 // (matching the existing sign-in flow). TODO: migrate to bcrypt hashing.
 func (s *ProfileService) UpdatePassword(ctx context.Context, userID string, req UpdatePasswordRequest) (*UpdatePasswordResponse, error) {
 	if req.CurrentPassword == "" || req.NewPassword == "" {
+		log.Printf("[WARN] Password update failed for user %s: missing fields in request", userID)
 		return nil, internal.NewBadRequest("currentPassword and newPassword are required")
 	}
 	if len(req.NewPassword) < 8 {
+		log.Printf("[WARN] Password update failed for user %s: new password too short", userID)
 		return nil, internal.NewBadRequest("newPassword must be at least 8 characters")
 	}
 

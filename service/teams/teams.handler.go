@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"pog/internal"
-	"pog/middleware"
 	"strconv"
 )
 
@@ -16,34 +15,38 @@ func NewTeamHandler(service *TeamService) *TeamHandler {
 	return &TeamHandler{service: service}
 }
 
-func (h *TeamHandler) RegisterRoutes(mux *http.ServeMux) {
+func (h *TeamHandler) RegisterRoutes(mux *http.ServeMux, authOrg func(http.Handler) http.Handler) {
 	p := internal.APIPrefix
 
 	// ── Routes with literal path segments MUST be registered before
 	//    wildcard {teamID} routes to avoid Go 1.22 mux ambiguity. ──
 
 	// Join via invite link (separate top-level path to avoid mux conflict with {teamID} routes)
-	mux.Handle("POST "+p+"/join-team/{token}", middleware.Auth(http.HandlerFunc(h.JoinViaToken)))
+	mux.Handle("POST "+p+"/join-team/{token}", authOrg(http.HandlerFunc(h.JoinViaToken)))
 
 	// Teams CRUD
-	mux.Handle("GET "+p+"/teams", middleware.Auth(http.HandlerFunc(h.ListMyTeams)))
-	mux.Handle("POST "+p+"/teams", middleware.Auth(http.HandlerFunc(h.CreateTeam)))
-	mux.Handle("PATCH "+p+"/teams/{teamID}", middleware.Auth(http.HandlerFunc(h.UpdateTeam)))
-	mux.Handle("DELETE "+p+"/teams/{teamID}", middleware.Auth(http.HandlerFunc(h.DeleteTeam)))
+	mux.Handle("GET "+p+"/teams", authOrg(http.HandlerFunc(h.ListMyTeams)))
+	mux.Handle("POST "+p+"/teams", authOrg(http.HandlerFunc(h.CreateTeam)))
+	mux.Handle("PATCH "+p+"/teams/{teamID}", authOrg(http.HandlerFunc(h.UpdateTeam)))
+	mux.Handle("DELETE "+p+"/teams/{teamID}", authOrg(http.HandlerFunc(h.DeleteTeam)))
 
 	// Members
-	mux.Handle("GET "+p+"/teams/{teamID}/members", middleware.Auth(http.HandlerFunc(h.ListMembers)))
-	mux.Handle("PATCH "+p+"/teams/{teamID}/members/{uid}", middleware.Auth(http.HandlerFunc(h.ChangeRole)))
-	mux.Handle("DELETE "+p+"/teams/{teamID}/members/{uid}", middleware.Auth(http.HandlerFunc(h.RemoveMember)))
+	mux.Handle("GET "+p+"/teams/{teamID}/members", authOrg(http.HandlerFunc(h.ListMembers)))
+	mux.Handle("PATCH "+p+"/teams/{teamID}/members/{uid}", authOrg(http.HandlerFunc(h.ChangeRole)))
+	mux.Handle("DELETE "+p+"/teams/{teamID}/members/{uid}", authOrg(http.HandlerFunc(h.RemoveMember)))
+	mux.Handle("POST "+p+"/teams/{teamID}/members/bulk-remove", authOrg(http.HandlerFunc(h.BulkRemoveMembers)))
+
+	// Ownership
+	mux.Handle("POST "+p+"/teams/{teamID}/transfer-ownership", authOrg(http.HandlerFunc(h.TransferOwnership)))
 
 	// Invites
-	mux.Handle("POST "+p+"/teams/{teamID}/invite", middleware.Auth(http.HandlerFunc(h.InviteByEmail)))
-	mux.Handle("GET "+p+"/teams/{teamID}/invite-link", middleware.Auth(http.HandlerFunc(h.GetInviteLink)))
+	mux.Handle("POST "+p+"/teams/{teamID}/invite", authOrg(http.HandlerFunc(h.InviteByEmail)))
+	mux.Handle("GET "+p+"/teams/{teamID}/invite-link", authOrg(http.HandlerFunc(h.GetInviteLink)))
 
 	// Feed
-	mux.Handle("GET "+p+"/teams/{teamID}/feed", middleware.Auth(http.HandlerFunc(h.GetFeed)))
-	mux.Handle("POST "+p+"/teams/{teamID}/feed/send", middleware.Auth(http.HandlerFunc(h.SendFeed)))
-	mux.Handle("PATCH "+p+"/teams/{teamID}/feed/{feedID}/resolve", middleware.Auth(http.HandlerFunc(h.ResolveFeed)))
+	mux.Handle("GET "+p+"/teams/{teamID}/feed", authOrg(http.HandlerFunc(h.GetFeed)))
+	mux.Handle("POST "+p+"/teams/{teamID}/feed/send", authOrg(http.HandlerFunc(h.SendFeed)))
+	mux.Handle("PATCH "+p+"/teams/{teamID}/feed/{feedID}/resolve", authOrg(http.HandlerFunc(h.ResolveFeed)))
 }
 
 // ── Teams CRUD ──────────────────────────────────────────────────────
@@ -193,6 +196,50 @@ func (h *TeamHandler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 	}
 
 	internal.SuccessResponse(w, http.StatusOK, map[string]bool{"removed": true})
+}
+
+func (h *TeamHandler) TransferOwnership(w http.ResponseWriter, r *http.Request) {
+	userID := internal.MustUserID(r.Context())
+	teamID := r.PathValue("teamID")
+
+	var dto TransferOwnershipDTO
+	if err := json.NewDecoder(r.Body).Decode(&dto); err != nil {
+		internal.ErrorResponse(w, internal.NewBadRequest("invalid payload"))
+		return
+	}
+
+	if err := h.service.TransferOwnership(r.Context(), teamID, dto.NewOwnerID, userID); err != nil {
+		if appErr, ok := err.(*internal.AppError); ok {
+			internal.ErrorResponse(w, appErr)
+		} else {
+			internal.ErrorResponse(w, internal.NewInternalError("failed to transfer ownership"))
+		}
+		return
+	}
+
+	internal.SuccessResponse(w, http.StatusOK, map[string]bool{"success": true})
+}
+
+func (h *TeamHandler) BulkRemoveMembers(w http.ResponseWriter, r *http.Request) {
+	userID := internal.MustUserID(r.Context())
+	teamID := r.PathValue("teamID")
+
+	var dto BulkRemoveMembersDTO
+	if err := json.NewDecoder(r.Body).Decode(&dto); err != nil {
+		internal.ErrorResponse(w, internal.NewBadRequest("invalid payload"))
+		return
+	}
+
+	if err := h.service.BulkRemoveMembers(r.Context(), teamID, dto.UserIDs, userID); err != nil {
+		if appErr, ok := err.(*internal.AppError); ok {
+			internal.ErrorResponse(w, appErr)
+		} else {
+			internal.ErrorResponse(w, internal.NewInternalError("failed to remove members"))
+		}
+		return
+	}
+
+	internal.SuccessResponse(w, http.StatusOK, map[string]bool{"success": true})
 }
 
 // ── Invites ─────────────────────────────────────────────────────────

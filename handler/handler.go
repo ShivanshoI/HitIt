@@ -8,6 +8,7 @@ import (
 	pogCollaboratorsSVC "pog/service/collaborators"
 	"pog/service/collections"
 	pogExecutionSVC "pog/service/execution"
+	pogOrganizationsSVC "pog/service/organizations"
 	pogPlansSVC "pog/service/plans"
 	pogProfileSVC "pog/service/profile"
 	pogRequestsSVC "pog/service/requests"
@@ -26,8 +27,11 @@ func CompileHandlers(db *mongo.Database) http.Handler {
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 
+	// Organizations Module Setup (returns authOrg middleware)
+	authOrg := pogOrganizationsSVC.InitModule(db, mux)
+
 	// Teams Module Setup (must be first — returns authTeam middleware)
-	authTeam := pogTeamsSVC.InitModule(db, mux)
+	authTeam := pogTeamsSVC.InitModule(db, mux, authOrg)
 
 	// Users Module Setup
 	pogUsersSVC.InitModule(db, mux)
@@ -38,11 +42,16 @@ func CompileHandlers(db *mongo.Database) http.Handler {
 	// Plans + Billing Module Setup (plans, subscription, payment method, invoices)
 	pogPlansSVC.InitModule(db, mux)
 
+	// Combined middleware for team-scoped modules
+	authOrgAndTeam := func(h http.Handler) http.Handler {
+		return authOrg(authTeam(h))
+	}
+
 	// Collections Module Setup (team-scoped)
-	collections.InitModule(db, mux, authTeam)
+	collections.InitModule(db, mux, authOrgAndTeam)
 
 	// Requests Module Setup (team-scoped)
-	pogRequestsSVC.InitModule(db, mux, authTeam)
+	pogRequestsSVC.InitModule(db, mux, authOrgAndTeam)
 
 	// Collaborators Module Setup
 	pogCollaboratorsSVC.InitModule(db, mux)
@@ -54,7 +63,7 @@ func CompileHandlers(db *mongo.Database) http.Handler {
 	pogActivityFeedSVC.InitModule(db, mux, wsHub)
 
 	// Execution Module Setup (team-scoped)
-	pogExecutionSVC.InitModule(db, mux, authTeam)
+	pogExecutionSVC.InitModule(db, mux, authOrgAndTeam)
 
 	return mux
 }

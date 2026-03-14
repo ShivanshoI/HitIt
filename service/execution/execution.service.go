@@ -118,9 +118,16 @@ func (s *ExecutionService) ExecuteRequest(ctx context.Context, requestID string,
 			BridgeRequestID: bridgeRequestID,
 		}
 
-		if teamID, ok := ctx.Value(internal.TeamIDKey).(string); ok && teamID != "" {
-			if objTeamID, err := primitive.ObjectIDFromHex(teamID); err == nil {
+		scope := internal.GetScope(ctx)
+		if scope.TeamID != "" {
+			if objTeamID, err := primitive.ObjectIDFromHex(scope.TeamID); err == nil {
 				historyEntry.TeamID = &objTeamID
+			}
+		}
+
+		if scope.OrgID != "" {
+			if objOrgID, err := primitive.ObjectIDFromHex(scope.OrgID); err == nil {
+				historyEntry.OrgID = &objOrgID
 			}
 		}
 

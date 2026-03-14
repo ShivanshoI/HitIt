@@ -240,3 +240,39 @@ func (r *UserRepository) EnsureIndexes(ctx context.Context) error {
 	_, err := r.collection.Indexes().CreateMany(ctx, indexes)
 	return err
 }
+
+// CountByOrganizationID returns the number of users that belong to this org
+func (r *UserRepository) CountByOrganizationID(ctx context.Context, orgID string) (int, error) {
+	objID, err := primitive.ObjectIDFromHex(orgID)
+	if err != nil {
+		return 0, err
+	}
+	count, err := r.collection.CountDocuments(ctx, bson.M{"organization_id": objID})
+	if err != nil {
+		return 0, err
+	}
+	return int(count), nil
+}
+
+// ConnectToOrganization updates the user's OrganizationID
+func (r *UserRepository) ConnectToOrganization(ctx context.Context, userID string, orgID string) error {
+	uID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return err
+	}
+	oID, err := primitive.ObjectIDFromHex(orgID)
+	if err != nil {
+		return err
+	}
+
+	_, err = r.collection.UpdateOne(ctx,
+		bson.M{"_id": uID},
+		bson.M{
+			"$set": bson.M{
+				"organization_id": oID,
+				"updated_at":      time.Now(),
+			},
+		},
+	)
+	return err
+}

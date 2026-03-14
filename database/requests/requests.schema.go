@@ -16,6 +16,7 @@ type APIRequest struct {
 	MasterID        primitive.ObjectID  `bson:"master_id" json:"master_id"`
 	UserID          primitive.ObjectID  `bson:"user_id" json:"user_id"`
 	TeamID          *primitive.ObjectID `bson:"team_id,omitempty" json:"team_id,omitempty"`
+	OrgID           *primitive.ObjectID `bson:"org_id,omitempty" json:"org_id,omitempty"`
 	CollectionID    primitive.ObjectID  `bson:"collection_id" json:"collection_id"`
 	Name            string              `bson:"name" json:"name"`
 	Tags            []string            `bson:"tags" json:"tags"`

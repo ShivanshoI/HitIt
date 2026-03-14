@@ -11,6 +11,7 @@ type Collection struct {
 	MasterID        primitive.ObjectID  `bson:"master_id" json:"master_id"`
 	UserID          primitive.ObjectID  `bson:"user_id" json:"user_id"`
 	TeamID          *primitive.ObjectID `bson:"team_id,omitempty" json:"team_id,omitempty"`
+	OrgID           *primitive.ObjectID `bson:"org_id,omitempty" json:"org_id,omitempty"`
 	Name            string              `bson:"name" json:"name"`
 	Tags            *[]string           `bson:"tags,omitempty" json:"tags,omitempty"`
 	Default_Method  string              `bson:"default_method" json:"default_method"`

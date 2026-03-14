@@ -12,6 +12,7 @@ import (
 	teamInvitesDB "pog/database/team_invites"
 	teamsDB "pog/database/teams"
 	teamsMappingDB "pog/database/teams_mapping"
+	userMappingDB "pog/database/user_mapping"
 	usersDB "pog/database/users"
 	"pog/internal"
 
@@ -21,26 +22,29 @@ import (
 )
 
 type TeamService struct {
-	repo        *teamsDB.TeamsRepository
-	mappingRepo *teamsMappingDB.TeamsMappingRepository
-	inviteRepo  *teamInvitesDB.TeamInvitesRepository
-	feedRepo    *teamFeedDB.TeamFeedRepository
-	userRepo    *usersDB.UserRepository
+	repo           *teamsDB.TeamsRepository
+	mappingRepo    *teamsMappingDB.TeamsMappingRepository
+	userMappingRepo *userMappingDB.UserMappingRepository
+	inviteRepo     *teamInvitesDB.TeamInvitesRepository
+	feedRepo       *teamFeedDB.TeamFeedRepository
+	userRepo       *usersDB.UserRepository
 }
 
 func NewTeamService(
 	repo *teamsDB.TeamsRepository,
 	mappingRepo *teamsMappingDB.TeamsMappingRepository,
+	userMappingRepo *userMappingDB.UserMappingRepository,
 	inviteRepo *teamInvitesDB.TeamInvitesRepository,
 	feedRepo *teamFeedDB.TeamFeedRepository,
 	userRepo *usersDB.UserRepository,
 ) *TeamService {
 	return &TeamService{
-		repo:        repo,
-		mappingRepo: mappingRepo,
-		inviteRepo:  inviteRepo,
-		feedRepo:    feedRepo,
-		userRepo:    userRepo,
+		repo:           repo,
+		mappingRepo:    mappingRepo,
+		userMappingRepo: userMappingRepo,
+		inviteRepo:     inviteRepo,
+		feedRepo:       feedRepo,
+		userRepo:       userRepo,
 	}
 }
 
@@ -114,12 +118,22 @@ func (s *TeamService) CreateTeam(ctx context.Context, dto *CreateTeamDTO, userID
 		return nil, internal.NewInternalError("failed to generate invite token")
 	}
 
+	orgID, _ := ctx.Value(internal.OrgIDKey).(string)
+	var objOrgID *primitive.ObjectID
+	if orgID != "" {
+		oid, err := primitive.ObjectIDFromHex(orgID)
+		if err == nil {
+			objOrgID = &oid
+		}
+	}
+
 	team := &teamsDB.Team{
-		Name:        dto.Name,
-		Theme:       dto.Theme,
-		Description: dto.Description,
-		OwnerID:     objUserID,
-		InviteToken: token,
+		Name:           dto.Name,
+		Theme:          dto.Theme,
+		Description:    dto.Description,
+		OwnerID:        objUserID,
+		OrganizationID: objOrgID,
+		InviteToken:    token,
 	}
 
 	created, err := s.repo.Create(ctx, team)
@@ -127,20 +141,38 @@ func (s *TeamService) CreateTeam(ctx context.Context, dto *CreateTeamDTO, userID
 		return nil, internal.NewInternalError("failed to create team")
 	}
 
-	// Auto-add creator as admin
+	// Auto-add creator as admin (Old system)
 	mapping := &teamsMappingDB.TeamMapping{
 		TeamID: created.ID,
 		UserID: objUserID,
 		Role:   "admin",
 	}
 	if err := s.mappingRepo.AddMember(ctx, mapping); err != nil {
-		log.Printf("[SERVICE] Failed to add creator as member: %v", err)
+		log.Printf("[SERVICE] Failed to add creator as member (old mapping): %v", err)
+	}
+
+	// NEW: Unified UserMapping for Org+Team context
+	if objOrgID != nil {
+		userMapping := &userMappingDB.UserMapping{
+			UserID:         objUserID,
+			OrganizationID: *objOrgID,
+			TeamID:         &created.ID,
+			Type:           "team",
+			Role:           "owner",
+			Status:         "active",
+		}
+		if err := s.userMappingRepo.Create(ctx, userMapping); err != nil {
+			log.Printf("[SERVICE] Failed to create unified user mapping: %v", err)
+		}
 	}
 
 	return s.buildTeamResponse(created, "admin", 1), nil
 }
 
 func (s *TeamService) ListMyTeams(ctx context.Context, userID string) ([]TeamResponse, error) {
+	scope := internal.GetScope(ctx)
+	orgID := scope.OrgID
+
 	mappings, err := s.mappingRepo.ListTeamsByUserID(ctx, userID)
 	if err != nil {
 		return nil, internal.NewInternalError("failed to list teams")
@@ -153,6 +185,14 @@ func (s *TeamService) ListMyTeams(ctx context.Context, userID string) ([]TeamRes
 			log.Printf("[SERVICE] Team %s not found for mapping: %v", m.TeamID.Hex(), err)
 			continue
 		}
+
+		// Filter by Organization if OrgID is present in context
+		if orgID != "" {
+			if team.OrganizationID == nil || team.OrganizationID.Hex() != orgID {
+				continue
+			}
+		}
+
 		count, _ := s.mappingRepo.CountMembers(ctx, m.TeamID.Hex())
 		responses = append(responses, *s.buildTeamResponse(team, m.Role, count))
 	}
@@ -302,6 +342,73 @@ func (s *TeamService) RemoveMember(ctx context.Context, teamID, targetUID, userI
 	return s.mappingRepo.RemoveMember(ctx, teamID, targetUID)
 }
 
+func (s *TeamService) TransferOwnership(ctx context.Context, teamID, newOwnerID, currentUserID string) error {
+	// 1. Verify caller is owner
+	if _, err := s.requireRole(ctx, teamID, currentUserID, "owner"); err != nil {
+		return err
+	}
+
+	// 2. Verify target is a member
+	_, err := s.mappingRepo.FindMember(ctx, teamID, newOwnerID)
+	if err != nil {
+		return internal.NewBadRequest("target user is not a member of this team")
+	}
+
+	// 3. Update Team document
+	if err := s.repo.Update(ctx, teamID, bson.M{"owner_id": internal.MustObjectID(newOwnerID)}); err != nil {
+		return internal.NewInternalError("failed to update team owner")
+	}
+
+	// 4. Update roles in old mapping system
+	if err := s.mappingRepo.UpdateMemberRole(ctx, teamID, currentUserID, "admin"); err != nil {
+		log.Printf("[SERVICE] Failed to demote old owner: %v", err)
+	}
+	if err := s.mappingRepo.UpdateMemberRole(ctx, teamID, newOwnerID, "admin"); err != nil {
+		log.Printf("[SERVICE] Failed to update new owner role: %v", err)
+	}
+
+	// 5. Update roles in NEW mapping system
+	// Demote old owner
+	oldMapping, err := s.userMappingRepo.FindByUserOrgAndTeam(ctx, currentUserID, "", teamID) // OrgID empty as check is team-scoped
+	if err == nil && oldMapping != nil {
+		s.userMappingRepo.UpdateRole(ctx, oldMapping.ID.Hex(), "admin", nil)
+	}
+	// Promote new owner
+	newMapping, err := s.userMappingRepo.FindByUserOrgAndTeam(ctx, newOwnerID, "", teamID)
+	if err == nil && newMapping != nil {
+		s.userMappingRepo.UpdateRole(ctx, newMapping.ID.Hex(), "owner", nil)
+	}
+
+	return nil
+}
+
+func (s *TeamService) BulkRemoveMembers(ctx context.Context, teamID string, userIDs []string, currentUserID string) error {
+	if _, err := s.requireRole(ctx, teamID, currentUserID, "admin"); err != nil {
+		return err
+	}
+
+	team, err := s.repo.FindID(ctx, teamID)
+	if err != nil {
+		return internal.NewNotFound("team not found")
+	}
+
+	for _, uid := range userIDs {
+		if uid == team.OwnerID.Hex() {
+			continue // Skip owner
+		}
+		// Remove from old system
+		s.mappingRepo.RemoveMember(ctx, teamID, uid)
+		
+		// Remove from new system
+		m, err := s.userMappingRepo.FindByUserOrgAndTeam(ctx, uid, "", teamID)
+		if err == nil && m != nil {
+			s.userMappingRepo.Delete(ctx, m.ID.Hex())
+		}
+	}
+
+	return nil
+}
+
 // ── 3. Invites ──────────────────────────────────────────────────────
 
 func (s *TeamService) InviteByEmail(ctx context.Context, teamID, userID string, dto *InviteDTO) (*InviteResponse, error) {
@@ -379,7 +486,22 @@ func (s *TeamService) JoinViaToken(ctx context.Context, token, userID string) (*
 		Role:   "member",
 	}
 	if err := s.mappingRepo.AddMember(ctx, mapping); err != nil {
-		return nil, internal.NewInternalError("failed to join team")
+		return nil, internal.NewInternalError("failed to join team (old mapping)")
+	}
+
+	// NEW: Unified UserMapping
+	if team.OrganizationID != nil {
+		userMapping := &userMappingDB.UserMapping{
+			UserID:         objUserID,
+			OrganizationID: *team.OrganizationID,
+			TeamID:         &team.ID,
+			Type:           "team",
+			Role:           "member",
+			Status:         "active",
+		}
+		if err := s.userMappingRepo.Create(ctx, userMapping); err != nil {
+			log.Printf("[SERVICE] Failed to create unified user mapping on join: %v", err)
+		}
 	}
 
 	count, _ := s.mappingRepo.CountMembers(ctx, team.ID.Hex())

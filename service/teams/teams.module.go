@@ -9,6 +9,7 @@ import (
 	teamInvitesDB "pog/database/team_invites"
 	teamsDB "pog/database/teams"
 	teamsMappingDB "pog/database/teams_mapping"
+	userMappingDB "pog/database/user_mapping"
 	usersDB "pog/database/users"
 
 	"go.mongodb.org/mongo-driver/mongo"
@@ -16,10 +17,11 @@ import (
 
 // InitModule bootstraps the teams domain and returns the
 // AuthWithTeam middleware for use by other modules.
-func InitModule(db *mongo.Database, mux *http.ServeMux) func(http.Handler) http.Handler {
+func InitModule(db *mongo.Database, mux *http.ServeMux, authOrg func(http.Handler) http.Handler) func(http.Handler) http.Handler {
 	// Repositories
 	repo := teamsDB.NewTeamsRepository(db)
 	mappingRepo := teamsMappingDB.NewTeamsMappingRepository(db)
+	userMappingRepo := userMappingDB.NewUserMappingRepository(db)
 	inviteRepo := teamInvitesDB.NewTeamInvitesRepository(db)
 	feedRepo := teamFeedDB.NewTeamFeedRepository(db)
 	userRepo := usersDB.NewUserRepository(db)
@@ -40,11 +42,11 @@ func InitModule(db *mongo.Database, mux *http.ServeMux) func(http.Handler) http.
 	}
 
 	// Service + Handler
-	service := NewTeamService(repo, mappingRepo, inviteRepo, feedRepo, userRepo)
+	service := NewTeamService(repo, mappingRepo, userMappingRepo, inviteRepo, feedRepo, userRepo)
 	handler := NewTeamHandler(service)
 
-	// Register team-specific endpoints
-	handler.RegisterRoutes(mux)
+		// Register team-specific endpoints
+	handler.RegisterRoutes(mux, authOrg)
 
 	// Return the team-scoping middleware so other modules can use it
 	return AuthWithTeam(db)

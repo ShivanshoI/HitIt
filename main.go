@@ -29,6 +29,7 @@ func main() {
 		middleware.Logger,
 		middleware.CORS,
 		middleware.JSONContentType,
+		middleware.Scope,
 	)
 	app := chain(mux)
 

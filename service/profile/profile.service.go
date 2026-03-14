@@ -133,7 +133,7 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID string, req U
 		email = *updated.EmailAddress
 	}
 
-	return &UpdateProfileResponse{
+	resp := &UpdateProfileResponse{
 		Success: true,
 		Message: "Profile updated successfully",
 		User: UserProfileResponse{
@@ -142,7 +142,13 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID string, req U
 			Email: email,
 			Theme: updated.Theme,
 		},
-	}, nil
+	}
+	if updated.OrganizationID != nil {
+		orgID := updated.OrganizationID.Hex()
+		resp.User.OrganizationID = &orgID
+	}
+
+	return resp, nil
 }
 
 // UpdatePassword validates the current password and sets a new one.

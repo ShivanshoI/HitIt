@@ -45,9 +45,16 @@ func (s *CollectionService) Create(ctx context.Context, payload *CreateCollectio
 		WritePermission: true,
 	}
 
-	if teamID, ok := ctx.Value(internal.TeamIDKey).(string); ok && teamID != "" {
-		if objTeamID, err := primitive.ObjectIDFromHex(teamID); err == nil {
+	scope := internal.GetScope(ctx)
+	if scope.TeamID != "" {
+		if objTeamID, err := primitive.ObjectIDFromHex(scope.TeamID); err == nil {
 			collectionModel.TeamID = &objTeamID
+		}
+	}
+
+	if scope.OrgID != "" {
+		if objOrgID, err := primitive.ObjectIDFromHex(scope.OrgID); err == nil {
+			collectionModel.OrgID = &objOrgID
 		}
 	}
 
@@ -117,6 +124,8 @@ func (s *CollectionService) ListAllCollection(ctx context.Context, userID string
 		collectionsList, total, err = s.repo.ListPaginatedSharedByUserID(ctx, userID, page, limit)
 	case "fav":
 		collectionsList, total, err = s.repo.ListPaginatedFavByUserID(ctx, userID, page, limit)
+	case "mine":
+		collectionsList, total, err = s.repo.ListPaginatedMineByUserID(ctx, userID, page, limit)
 	default:
 		collectionsList, total, err = s.repo.ListPaginatedByUserID(ctx, userID, page, limit)
 	}
@@ -131,8 +140,8 @@ func (s *CollectionService) ListAllCollection(ctx context.Context, userID string
 		switch filter {
 		case "share":
 			collectionsList, total, err = s.repo.ListPaginatedSharedByUserID(ctx, userID, page, limit)
-		case "fav":
-			collectionsList, total, err = s.repo.ListPaginatedFavByUserID(ctx, userID, page, limit)
+		case "mine":
+			collectionsList, total, err = s.repo.ListPaginatedMineByUserID(ctx, userID, page, limit)
 		default:
 			collectionsList, total, err = s.repo.ListPaginatedByUserID(ctx, userID, page, limit)
 		}
@@ -264,6 +273,12 @@ func (s *CollectionService) CreateDefaultCollections(ctx context.Context, userID
 		if teamID, ok := ctx.Value(internal.TeamIDKey).(string); ok && teamID != "" {
 			if objTeamID, err := primitive.ObjectIDFromHex(teamID); err == nil {
 				newCol.TeamID = &objTeamID
+			}
+		}
+
+		if orgID, ok := ctx.Value(internal.OrgIDKey).(string); ok && orgID != "" {
+			if objOrgID, err := primitive.ObjectIDFromHex(orgID); err == nil {
+				newCol.OrgID = &objOrgID
 			}
 		}
 

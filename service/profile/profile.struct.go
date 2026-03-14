@@ -44,6 +44,7 @@ type UserProfileResponse struct {
 	Name  string `json:"name"`
 	Email string `json:"email"`
 	Theme string `json:"theme"`
+	OrganizationID *string `json:"organizationId,omitempty"`
 }
 
 // UpdateProfileResponse wraps the updated user.

@@ -39,6 +39,14 @@ type InviteDTO struct {
 	Emails []string `json:"emails"`
 }
 
+type TransferOwnershipDTO struct {
+	NewOwnerID string `json:"new_owner_id"`
+}
+
+type BulkRemoveMembersDTO struct {
+	UserIDs []string `json:"user_ids"`
+}
+
 type SendFeedDTO struct {
 	Type     string   `json:"type"`
 	Message  string   `json:"message"`

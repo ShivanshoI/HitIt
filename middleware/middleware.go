@@ -66,8 +66,15 @@ func Auth(next http.Handler) http.Handler {
 
 		log.Printf("[AUTH] authenticated user %s for %s", userID, r.URL.Path)
 
+		// Update unified scope with UserID
+		ctx := r.Context()
+		if s, ok := ctx.Value(internal.ScopeKey).(internal.Scope); ok {
+			s.UserID = userID
+			ctx = context.WithValue(ctx, internal.ScopeKey, s)
+		}
+
 		// Add userID to the request context
-		ctx := context.WithValue(r.Context(), internal.UserIDKey, userID)
+		ctx = context.WithValue(ctx, internal.UserIDKey, userID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -91,7 +98,7 @@ func CORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Team-Id")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Team-Id, X-Org-Id")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -126,6 +133,32 @@ func JSONContentType(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		next.ServeHTTP(w, r)
+	})
+}
+
+// Scope extracts x-team-id and x-org-id into a unified Scope object in the context.
+func Scope(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		teamID := r.Header.Get("X-Team-Id")
+		orgID := r.Header.Get("X-Org-Id")
+		
+		// Note: UserID is added later by Auth middleware, but we initialize the struct here.
+		scope := internal.Scope{
+			TeamID: teamID,
+			OrgID:  orgID,
+		}
+
+		ctx := context.WithValue(r.Context(), internal.ScopeKey, scope)
+		
+		// Also set individual keys for backward compatibility
+		if teamID != "" {
+			ctx = context.WithValue(ctx, internal.TeamIDKey, teamID)
+		}
+		if orgID != "" {
+			ctx = context.WithValue(ctx, internal.OrgIDKey, orgID)
+		}
+
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 

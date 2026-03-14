@@ -22,6 +22,7 @@ func (h *CollectionHandler) RegisterRoutes(mux *http.ServeMux, authTeam func(htt
 	mux.Handle("POST "+internal.APIPrefix+"/collections", authTeam(http.HandlerFunc(h.Create)))
 	mux.Handle("GET "+internal.APIPrefix+"/collections", authTeam(http.HandlerFunc(h.List)))
 	mux.Handle("PATCH "+internal.APIPrefix+"/collections/{collectionID}/mod/", authTeam(http.HandlerFunc(h.UpdateField)))
+	mux.Handle("PATCH "+internal.APIPrefix+"/collections/{collectionID}/mod/favorite", authTeam(http.HandlerFunc(h.UpdateField)))
 	mux.Handle("DELETE "+internal.APIPrefix+"/collections/{collectionID}", authTeam(http.HandlerFunc(h.Delete)))
 }
 
@@ -69,7 +70,9 @@ func (h *CollectionHandler) ListByUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	internal.SuccessResponse(w, http.StatusOK, collectionsList)
+	internal.SuccessResponse(w, http.StatusOK, map[string]interface{}{
+		"collections": collectionsList,
+	})
 }
 
 func (h *CollectionHandler) List(w http.ResponseWriter, r *http.Request) {

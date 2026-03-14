@@ -25,20 +25,46 @@ func NewHistoryRepository(db *mongo.Database) *HistoryRepository {
 	}
 }
 
-// applyTeamScope injects the X-Team-Id into the MongoDB filter.
-func applyTeamScope(ctx context.Context, filter bson.M) bson.M {
-	teamID, ok := ctx.Value(internal.TeamIDKey).(string)
-	if ok && teamID != "" {
-		objID, err := primitive.ObjectIDFromHex(teamID)
-		if err == nil {
-			filter["team_id"] = objID
-			// In team scope, we show all history for the team
-			delete(filter, "user_id") 
+// applyScope dynamically builds the filter for Personal, Team, and Organization modes.
+func applyScope(ctx context.Context, filter bson.M) bson.M {
+	orgID, hasOrg := ctx.Value(internal.OrgIDKey).(string)
+	teamID, hasTeam := ctx.Value(internal.TeamIDKey).(string)
+
+	isOrgMode := hasOrg && orgID != ""
+	isTeamMode := hasTeam && teamID != ""
+
+	if isOrgMode {
+		// --- ORGANIZATION MODE ---
+		objOrgID, _ := primitive.ObjectIDFromHex(orgID)
+		filter["org_id"] = objOrgID
+
+		if isTeamMode {
+			// Scenario B: Org + Team (find with orgId + teamId)
+			objTeamID, _ := primitive.ObjectIDFromHex(teamID)
+			filter["team_id"] = objTeamID
+			
+			// We remove user_id because the resource belongs to the team/org, not an individual
+			delete(filter, "user_id")
+		} else {
+			// Scenario A: Org Only (find with orgId + userId)
+			filter["team_id"] = nil
+			// (user_id remains in the filter)
 		}
+	} else if isTeamMode {
+		// --- STANDALONE TEAM MODE ---
+		objTeamID, _ := primitive.ObjectIDFromHex(teamID)
+		filter["team_id"] = objTeamID
+		filter["org_id"] = nil
+		
+		// Remove user_id because the resource belongs to the team
+		delete(filter, "user_id") 
 	} else {
-		// Personal scope: ensure team_id does not exist
+		// --- PERSONAL MODE ---
 		filter["team_id"] = nil
+		filter["org_id"] = nil
+		// (user_id remains in the filter natively)
 	}
+
 	return filter
 }
 
@@ -63,7 +89,7 @@ func (r *HistoryRepository) ListByUserID(ctx context.Context, userID string, pag
 		return nil, 0, err
 	}
 
-	filter := applyTeamScope(ctx, bson.M{"user_id": objUserID})
+	filter := applyScope(ctx, bson.M{"user_id": objUserID})
 	
 	total, err := r.collection.CountDocuments(ctx, filter)
 	if err != nil {

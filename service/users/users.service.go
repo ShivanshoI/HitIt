@@ -47,6 +47,10 @@ func (s *UserService) SignIn(ctx context.Context, identifier, password string) (
 	if user.NickName != nil {
 		userResp.NickName = *user.NickName
 	}
+	if user.OrganizationID != nil {
+		orgID := user.OrganizationID.Hex()
+		userResp.OrganizationID = &orgID
+	}
 
 	token, err := internal.GenerateToken(user.ID.Hex())
 	if err != nil {
@@ -102,6 +106,10 @@ func (s *UserService) SignUp(ctx context.Context, payload *users.User) (*SignInR
 	if user.NickName != nil {
 		userResp.NickName = *user.NickName
 	}
+	if user.OrganizationID != nil {
+		orgID := user.OrganizationID.Hex()
+		userResp.OrganizationID = &orgID
+	}
 
 	// 4. Generate Token
 	token, err := internal.GenerateToken(user.ID.Hex())
@@ -116,10 +124,35 @@ func (s *UserService) SignUp(ctx context.Context, payload *users.User) (*SignInR
 }
 
 // GetMe returns the currently authenticated user's profile.
-func (s *UserService) GetMe(ctx context.Context, userID string) (*users.User, error) {
+func (s *UserService) GetMe(ctx context.Context, userID string) (*UserResponse, error) {
 	user, err := s.repo.GetByID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	return user, nil
+
+	userResp := UserResponse{
+		ID:        user.ID.Hex(),
+		FirstName: user.FirstName,
+		CreatedAt: user.CreatedAt.Format(time.RFC3339),
+		UpdatedAt: user.UpdatedAt.Format(time.RFC3339),
+	}
+
+	if user.LastName != nil {
+		userResp.LastName = *user.LastName
+	}
+	if user.PhoneNumber != nil {
+		userResp.PhoneNumber = *user.PhoneNumber
+	}
+	if user.EmailAddress != nil {
+		userResp.EmailAddress = *user.EmailAddress
+	}
+	if user.NickName != nil {
+		userResp.NickName = *user.NickName
+	}
+	if user.OrganizationID != nil {
+		orgID := user.OrganizationID.Hex()
+		userResp.OrganizationID = &orgID
+	}
+
+	return &userResp, nil
 }

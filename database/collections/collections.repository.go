@@ -25,22 +25,50 @@ func NewCollectionRepository(db *mongo.Database) *CollectionRepository {
 	}
 }
 
-// applyTeamScope injects the X-Team-Id into the MongoDB filter.
-// - If inside a team, it ignores `user_id` and filters purely by `team_id`.
-// - If personal scope, it enforces that `team_id` is missing or null.
-func applyTeamScope(ctx context.Context, filter bson.M) bson.M {
-	teamID, ok := ctx.Value(internal.TeamIDKey).(string)
-	if ok && teamID != "" {
-		objID, err := primitive.ObjectIDFromHex(teamID)
-		if err == nil {
-			filter["team_id"] = objID
-			// In team scope, we show all collections for the team, regardless of who created them.
-			delete(filter, "user_id") 
+// applyScope dynamically builds the filter for Personal, Team, and Organization modes.
+func applyScope(ctx context.Context, filter bson.M, skipUserIDDelete bool) bson.M {
+	orgID, hasOrg := ctx.Value(internal.OrgIDKey).(string)
+	teamID, hasTeam := ctx.Value(internal.TeamIDKey).(string)
+
+	isOrgMode := hasOrg && orgID != ""
+	isTeamMode := hasTeam && teamID != ""
+
+	if isOrgMode {
+		// --- ORGANIZATION MODE ---
+		objOrgID, _ := primitive.ObjectIDFromHex(orgID)
+		filter["org_id"] = objOrgID
+
+		if isTeamMode {
+			// Scenario B: Org + Team (find with orgId + teamId)
+			objTeamID, _ := primitive.ObjectIDFromHex(teamID)
+			filter["team_id"] = objTeamID
+			
+			// If skipUserIDDelete is false, we remove user_id because the resource belongs to the team/org
+			if !skipUserIDDelete {
+				delete(filter, "user_id")
+			}
+		} else {
+			// Scenario A: Org Only (find with orgId + userId)
+			filter["team_id"] = nil
+			// (user_id remains in the filter)
+		}
+	} else if isTeamMode {
+		// --- STANDALONE TEAM MODE ---
+		objTeamID, _ := primitive.ObjectIDFromHex(teamID)
+		filter["team_id"] = objTeamID
+		filter["org_id"] = nil
+		
+		// If skipUserIDDelete is false, remove user_id because the resource belongs to the team
+		if !skipUserIDDelete {
+			delete(filter, "user_id")
 		}
 	} else {
-		// Personal scope: ensure team_id does not exist
+		// --- PERSONAL MODE ---
 		filter["team_id"] = nil
+		filter["org_id"] = nil
+		// (user_id remains in the filter natively)
 	}
+
 	return filter
 }
 
@@ -70,7 +98,7 @@ func (r *CollectionRepository) FindAllByUserID(ctx context.Context, userID strin
 	if err != nil {
 		return nil, err
 	}
-	filter := applyTeamScope(ctx, bson.M{"user_id": objId})
+	filter := applyScope(ctx, bson.M{"user_id": objId}, false)
 	
 	cursor, err := r.collection.Find(ctx, filter)
 	if err != nil {
@@ -92,7 +120,7 @@ func (r *CollectionRepository) FindAllByMasterID(ctx context.Context, masterID s
 		return nil, err
 	}
 
-	filter := applyTeamScope(ctx, bson.M{"master_id": objID})
+	filter := applyScope(ctx, bson.M{"master_id": objID}, false)
 
 	cursor, err := r.collection.Find(ctx, filter)
 	if err != nil {
@@ -114,7 +142,7 @@ func (r *CollectionRepository) GetByID(ctx context.Context, id string) (*Collect
 		return nil, err
 	}
 
-	filter := applyTeamScope(ctx, bson.M{"_id": objID})
+	filter := applyScope(ctx, bson.M{"_id": objID}, false)
 
 	var collection Collection
 	err = r.collection.FindOne(ctx, filter).Decode(&collection)
@@ -130,7 +158,7 @@ func (r *CollectionRepository) GetByMasterID(ctx context.Context, id string) (*C
 		return nil, err
 	}
 
-	filter := applyTeamScope(ctx, bson.M{"master_id": objID})
+	filter := applyScope(ctx, bson.M{"master_id": objID}, false)
 
 	var collection Collection
 	err = r.collection.FindOne(ctx, filter).Decode(&collection)
@@ -147,7 +175,7 @@ func (r *CollectionRepository) ListByUserID(ctx context.Context, userID string) 
 		return nil, err
 	}
 
-	filter := applyTeamScope(ctx, bson.M{"user_id": objUserID})
+	filter := applyScope(ctx, bson.M{"user_id": objUserID}, false)
 
 	opts := options.Find().SetSort(bson.M{"updated_at": -1})
 	cursor, err := r.collection.Find(ctx, filter, opts)
@@ -216,20 +244,28 @@ func (r *CollectionRepository) ListPaginatedByUserID(ctx context.Context, userID
 	if err != nil {
 		return nil, 0, err
 	}
-	filter := applyTeamScope(ctx, bson.M{"user_id": objUserID})
+	filter := applyScope(ctx, bson.M{"user_id": objUserID}, false)
 	return r.listPaginated(ctx, filter, page, limit)
 }
 
-// ListPaginatedSharedByUserID retrieves paginated shared collections for a specific user
 func (r *CollectionRepository) ListPaginatedSharedByUserID(ctx context.Context, userID string, page, limit int) ([]Collection, int64, error) {
 	objUserID, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
 		return nil, 0, err
 	}
-	filter := applyTeamScope(ctx, bson.M{
+	filter := applyScope(ctx, bson.M{
 		"user_id": objUserID,
 		"$expr":   bson.M{"$ne": bson.A{"$_id", "$master_id"}},
-	})
+	}, false)
+	return r.listPaginated(ctx, filter, page, limit)
+}
+
+func (r *CollectionRepository) ListPaginatedMineByUserID(ctx context.Context, userID string, page, limit int) ([]Collection, int64, error) {
+	objUserID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return nil, 0, err
+	}
+	filter := applyScope(ctx, bson.M{"user_id": objUserID}, true)
 	return r.listPaginated(ctx, filter, page, limit)
 }
 
@@ -238,10 +274,10 @@ func (r *CollectionRepository) ListPaginatedFavByUserID(ctx context.Context, use
 	if err != nil {
 		return nil, 0, err
 	}
-	filter := applyTeamScope(ctx, bson.M{
+	filter := applyScope(ctx, bson.M{
 		"user_id":  objUserID,
 		"favorite": true,
-	})
+	}, false)
 	return r.listPaginated(ctx, filter, page, limit)
 }
 

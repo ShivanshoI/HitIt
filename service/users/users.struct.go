@@ -20,7 +20,8 @@ type UserResponse struct {
 	LastName     string `json:"last_name"`
 	NickName     string `json:"nick_name"`
 	PhoneNumber  string `json:"phone_number"`
-	EmailAddress string `json:"email_address"`
-	CreatedAt    string `json:"created_at"`
-	UpdatedAt    string `json:"updated_at"`
+	EmailAddress   string  `json:"email_address"`
+	OrganizationID *string `json:"organizationId,omitempty"`
+	CreatedAt      string  `json:"created_at"`
+	UpdatedAt      string  `json:"updated_at"`
 }

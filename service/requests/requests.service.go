@@ -66,9 +66,16 @@ func (s *RequestService) Create(ctx context.Context, payload *CreateRequestDTO, 
 		WritePermission: true,
 	}
 
-	if teamID, ok := ctx.Value(internal.TeamIDKey).(string); ok && teamID != "" {
-		if objTeamID, err := primitive.ObjectIDFromHex(teamID); err == nil {
+	scope := internal.GetScope(ctx)
+	if scope.TeamID != "" {
+		if objTeamID, err := primitive.ObjectIDFromHex(scope.TeamID); err == nil {
 			reqModel.TeamID = &objTeamID
+		}
+	}
+
+	if scope.OrgID != "" {
+		if objOrgID, err := primitive.ObjectIDFromHex(scope.OrgID); err == nil {
+			reqModel.OrgID = &objOrgID
 		}
 	}
 

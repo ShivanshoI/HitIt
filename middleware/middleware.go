@@ -162,6 +162,19 @@ func Scope(next http.Handler) http.Handler {
 	})
 }
 
+// PerformanceMonitor alerts in terminal if the request takes longer than 150ms.
+func PerformanceMonitor(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		duration := time.Since(start)
+
+		if duration > 150*time.Millisecond {
+			log.Printf("\033[31m[PERF ALERT] Slow request: %s %s took %v (limit: 150ms)\033[0m", r.Method, r.URL.Path, duration)
+		}
+	})
+}
+
 // ── chain helper ────────────────────────────────────────────────────
 
 // Middleware is a function that wraps an http.Handler.

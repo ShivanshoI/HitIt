@@ -48,9 +48,11 @@ func applyScope(ctx context.Context, filter bson.M, skipUserIDDelete bool) bson.
 				delete(filter, "user_id")
 			}
 		} else {
-			// Scenario A: Org Only (find with orgId + userId)
+			// Scenario A: Org Only
 			filter["team_id"] = nil
-			// (user_id remains in the filter)
+			if !skipUserIDDelete {
+				delete(filter, "user_id") // ← add this line
+			}
 		}
 	} else if isTeamMode {
 		// --- STANDALONE TEAM MODE ---

@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"pog/database/user_mapping"
 	"pog/database/users"
 	"pog/internal"
 	"pog/middleware"
@@ -16,6 +17,7 @@ import (
 // It ensures the user is authenticated (applying middleware.Auth if needed).
 func AuthWithOrg(db *mongo.Database) func(http.Handler) http.Handler {
 	userRepo := users.NewUserRepository(db)
+	mappingRepo := user_mapping.NewUserMappingRepository(db)
 
 	return func(next http.Handler) http.Handler {
 		// The actual logic for organization validation
@@ -39,9 +41,13 @@ func AuthWithOrg(db *mongo.Database) func(http.Handler) http.Handler {
 			}
 
 			if user.OrganizationID == nil || user.OrganizationID.Hex() != orgIDHeader {
-				log.Printf("[ORG-MW] user %s is not affiliated with organization %s", userID, orgIDHeader)
-				internal.ErrorResponse(w, internal.NewForbidden("not affiliated with this organization"))
-				return
+				// Fallback: check the new UserMapping table
+				mappings, err := mappingRepo.FindByUserAndOrg(r.Context(), userID, orgIDHeader)
+				if err != nil || len(mappings) == 0 {
+					log.Printf("[ORG-MW] user %s is not affiliated with organization %s", userID, orgIDHeader)
+					internal.ErrorResponse(w, internal.NewForbidden("not affiliated with this organization"))
+					return
+				}
 			}
 
 			// Set org_id in context

@@ -25,6 +25,7 @@ func main() {
 	mux := handler.CompileHandlers(db)
 
 	chain := middleware.Chain(
+		middleware.PerformanceMonitor,
 		middleware.Recovery,
 		middleware.Logger,
 		middleware.CORS,

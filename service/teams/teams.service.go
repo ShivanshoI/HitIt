@@ -141,11 +141,11 @@ func (s *TeamService) CreateTeam(ctx context.Context, dto *CreateTeamDTO, userID
 		return nil, internal.NewInternalError("failed to create team")
 	}
 
-	// Auto-add creator as admin (Old system)
+	// Auto-add creator as owner (old system) — was incorrectly "admin"
 	mapping := &teamsMappingDB.TeamMapping{
 		TeamID: created.ID,
 		UserID: objUserID,
-		Role:   "admin",
+		Role:   "owner",
 	}
 	if err := s.mappingRepo.AddMember(ctx, mapping); err != nil {
 		log.Printf("[SERVICE] Failed to add creator as member (old mapping): %v", err)
@@ -166,7 +166,7 @@ func (s *TeamService) CreateTeam(ctx context.Context, dto *CreateTeamDTO, userID
 		}
 	}
 
-	return s.buildTeamResponse(created, "admin", 1), nil
+	return s.buildTeamResponse(created, "owner", 1), nil
 }
 
 func (s *TeamService) ListMyTeams(ctx context.Context, userID string) ([]TeamResponse, error) {
@@ -194,7 +194,13 @@ func (s *TeamService) ListMyTeams(ctx context.Context, userID string) ([]TeamRes
 		}
 
 		count, _ := s.mappingRepo.CountMembers(ctx, m.TeamID.Hex())
-		responses = append(responses, *s.buildTeamResponse(team, m.Role, count))
+		
+		// In ListMyTeams, after finding the team, check OwnerID to assign correct role
+		role := m.Role
+		if team.OwnerID.Hex() == userID {
+			role = "owner"
+		}
+		responses = append(responses, *s.buildTeamResponse(team, role, count))
 	}
 	return responses, nil
 }

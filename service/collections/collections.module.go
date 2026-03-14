@@ -8,6 +8,7 @@ import (
 	pogCollectionsDB "pog/database/collections"
 	pogConstantsDB "pog/database/constants"
 	pogRequestsDB "pog/database/requests"
+	"pog/database/teams_mapping"
 
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -18,7 +19,8 @@ func InitModule(db *mongo.Database, mux *http.ServeMux, authTeam func(http.Handl
 	repo := pogCollectionsDB.NewCollectionRepository(db)
 	constRepo := pogConstantsDB.NewConstantRepository(db)
 	requestsRepo := pogRequestsDB.NewRequestRepository(db)
-	service := NewCollectionService(repo, constRepo, requestsRepo)
+	mappingRepo := teams_mapping.NewTeamsMappingRepository(db)
+	service := NewCollectionService(repo, constRepo, requestsRepo, mappingRepo)
 	handler := NewCollectionHandler(service)
 
 	// Ensure database indexes are created

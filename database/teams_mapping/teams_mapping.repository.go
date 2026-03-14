@@ -70,6 +70,14 @@ func (r *TeamsMappingRepository) FindMember(ctx context.Context, teamID, userID 
 	return &mapping, nil
 }
 
+func (r *TeamsMappingRepository) GetMemberRole(ctx context.Context, teamID, userID string) (string, error) {
+	mapping, err := r.FindMember(ctx, teamID, userID)
+	if err != nil {
+		return "", err
+	}
+	return mapping.Role, nil
+}
+
 func (r *TeamsMappingRepository) ListMembersByTeamID(ctx context.Context, teamID string) ([]TeamMapping, error) {
 	objTeamID, err := primitive.ObjectIDFromHex(teamID)
 	if err != nil {

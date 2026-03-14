@@ -6,6 +6,7 @@ import (
 	"pog/database/collections"
 	"pog/database/constants"
 	pogRequestsDB "pog/database/requests"
+	"pog/database/teams_mapping"
 	"pog/internal"
 	"sync"
 	"time"
@@ -17,15 +18,37 @@ type CollectionService struct {
 	repo         *collections.CollectionRepository
 	constRepo    *constants.ConstantRepository
 	requestsRepo *pogRequestsDB.RequestRepository
+	mappingRepo  *teams_mapping.TeamsMappingRepository
 	userLocks    sync.Map
 }
 
-func NewCollectionService(repo *collections.CollectionRepository, constRepo *constants.ConstantRepository, requestsRepo *pogRequestsDB.RequestRepository) *CollectionService {
+func NewCollectionService(
+	repo *collections.CollectionRepository,
+	constRepo *constants.ConstantRepository,
+	requestsRepo *pogRequestsDB.RequestRepository,
+	mappingRepo *teams_mapping.TeamsMappingRepository,
+) *CollectionService {
 	return &CollectionService{
 		repo:         repo,
 		constRepo:    constRepo,
 		requestsRepo: requestsRepo,
+		mappingRepo:  mappingRepo,
 	}
+}
+
+func (s *CollectionService) canModify(ctx context.Context, col *collections.Collection, userID string) bool {
+	// Always allowed if you own it personally
+	if col.UserID.Hex() == userID {
+		return true
+	}
+	// In team scope: allow if caller is an admin/owner of the team
+	if col.TeamID != nil {
+		role, err := s.mappingRepo.GetMemberRole(ctx, col.TeamID.Hex(), userID)
+		if err == nil && (role == "admin" || role == "owner") {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *CollectionService) Create(ctx context.Context, payload *CreateCollectionDTO, userID string) (*CollectionResponse, error) {
@@ -186,7 +209,7 @@ func (s *CollectionService) UpdateFields(ctx context.Context, collectionID strin
 		return nil, internal.NewNotFound("Collection not found")
 	}
 
-	if col.UserID.Hex() != userID {
+	if !s.canModify(ctx, col, userID) {
 		return nil, internal.NewUnauthorized("Unauthorized to modify this collection")
 	}
 
@@ -315,8 +338,8 @@ func (s *CollectionService) Delete(ctx context.Context, collectionID string, use
 		return internal.NewNotFound("Collection not found")
 	}
 
-	if col.UserID.Hex() != userID {
-		return internal.NewUnauthorized("Unauthorized to delete this collection")
+	if !s.canModify(ctx, col, userID) {
+		return internal.NewUnauthorized("Unauthorized to modify this collection")
 	}
 
 	// Delete all requests in this collection
